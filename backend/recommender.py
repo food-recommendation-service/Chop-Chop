@@ -12,10 +12,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ==================================================================================
-# [1] API 키 및 모델 설정
+# [1] 설정
 # ==================================================================================
-GOOGLE_API_KEY = "AIzaSyC-gSjkrWo8mjx8N_NR4h6a6Bk7taseW7s"
-GEMINI_API_KEY = "AIzaSyC-gSjkrWo8mjx8N_NR4h6a6Bk7taseW7s"
+GOOGLE_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyC-gSjkrWo8mjx8N_NR4h6a6Bk7taseW7s")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyC-gSjkrWo8mjx8N_NR4h6a6Bk7taseW7s")
 
 genai.configure(api_key=GEMINI_API_KEY)
 llm_model = genai.GenerativeModel('models/gemini-2.0-flash')
@@ -25,11 +25,10 @@ embed_model = SentenceTransformer('jhgan/ko-sroberta-multitask')
 print("✅ 시스템 준비 완료!\n")
 
 # ==================================================================================
-# [2] 핵심 분석 및 스코어링 함수 (원본 로직 유지)
+# [2] 유틸리티 함수
 # ==================================================================================
 
 def haversine_distance(lat1, lon1, lat2, lon2):
-    """두 지점의 위도, 경도를 받아 거리를 km 단위로 계산"""
     R = 6371
     lat1_rad, lon1_rad = np.radians(lat1), np.radians(lon1)
     lat2_rad, lon2_rad = np.radians(lat2), np.radians(lon2)
@@ -37,156 +36,147 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     a = np.sin(dlat / 2)**2 + np.cos(lat1_rad) * np.cos(lat2_rad) * np.sin(dlon / 2)**2
     return R * 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
 
-def calculate_recency_score(reviews):
-    """[활성도 점수] 리뷰 5개 이상 시 만점"""
-    if not reviews: return 0.0
-    return min(len(reviews) / 5.0, 1.0) 
-
-def calculate_popularity_score(count):
-    """[인기도 점수] 리뷰 개수를 로그 스케일로 변환"""
-    if not count: return 0.0
-    return min(np.log10(count + 1) / 4.0, 1.0)
-
-def hard_filter_by_similarity(place_docs, user_query, threshold=0.3):
-    """
-    [하드 필터링] 의미적 유사도가 낮은 식당 즉시 제거
-    '두바이쫀득쿠키' 입력 시 유사도 0.3 미만인 식당은 가차없이 탈락시킵니다.
-    """
-    if not place_docs: return []
-    doc_texts = [p['text'] for p in place_docs]
-    embeddings = embed_model.encode(doc_texts)
-    query_embedding = embed_model.encode([user_query])
-    sim_scores = cosine_similarity(query_embedding, embeddings)[0]
-    
-    passed_docs = []
-    for i, score in enumerate(sim_scores):
-        if score >= threshold:
-            place_docs[i]['sim_score'] = score
-            passed_docs.append(place_docs[i])
-    
-    print(f"✂️ 하드 필터링: {len(place_docs)}개 중 {len(passed_docs)}개 생존 (기준: {threshold})")
-    return passed_docs
-
 def get_naver_style_features(place_name, reviews):
-    """[LLM 분석] 리뷰에서 분위기, 동행, 목적 추출"""
     if not reviews: return {}
     combined_review = " ".join([r.get('text', {}).get('text', '') for r in reviews[:5]])
     prompt = f"""
-    당신은 맛집 데이터 분석가입니다. 아래 식당의 리뷰를 분석하여 정보를 JSON 포맷으로 추출하세요.
     식당명: {place_name}
-    리뷰데이터: {combined_review[:800]}
-    반드시 JSON 형식만 출력하세요: {{"atmosphere": "...", "companion": "...", "purpose": "...", "keywords": [...]}}
+    리뷰: {combined_review[:800]}
+    정보를 JSON으로 추출하세요: {{"atmosphere": "...", "companion": "...", "purpose": "...", "keywords": [...]}}
     """
     try:
         response = llm_model.generate_content(prompt)
         match = re.search(r'\{.*\}', response.text, re.DOTALL)
         return json.loads(match.group(0)) if match else {}
-    except Exception: return {}
+    except: return {}
 
 # ==================================================================================
-# [3] 데이터 수집 함수 (Pagination 적용하여 200개 확보)
+# [3] 핵심 로직 (수집 -> 필터링 -> 스코어링)
 # ==================================================================================
 
-def get_bulk_places(search_query, center_lat, center_lng, radius_km, target_count=200):
-    """[대량 수집] 최대 10페이지(200개)까지 반복 호출"""
+def get_bulk_places(search_query, center_lat, center_lng, radius_km):
+    """
+    구글 API 호출 함수 (단일 키워드당 최대 60개)
+    깔끔하게 API 호출 역할만 수행합니다.
+    """
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_API_KEY,
         'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.reviews,places.location,places.formattedAddress,nextPageToken'
     }
-    all_places_dict = {}
+    places_list = []
     next_token = None
     
-    print(f"🕵️ '{search_query}' 대량 수집 시작 (목표: {target_count}개)...")
-    
-    for page in range(10):
+    # 3페이지(60개)까지만 수집 (구글 제한)
+    for _ in range(3):
         payload = {
             "textQuery": search_query,
             "locationBias": {"circle": {"center": {"latitude": center_lat, "longitude": center_lng}, "radius": radius_km * 1000}},
             "languageCode": "ko", "maxResultCount": 20, "pageToken": next_token
         }
         try:
-            response = requests.post(url, json=payload, headers=headers)
-            data = response.json()
-            places = data.get('places', [])
+            resp = requests.post(url, json=payload, headers=headers).json()
+            batch = resp.get('places', [])
+            places_list.extend(batch)
+            next_token = resp.get('nextPageToken')
+            if not next_token: break
+            time.sleep(1.0)
+        except: break
+    return places_list
+
+def hard_filter_by_similarity(place_docs, user_query, threshold=0.3):
+    """
+    하드 필터링: 가게 이름 + 리뷰 텍스트로 유사도 검사
+    """
+    if not place_docs: return []
+    
+    # [중요 보완] 리뷰뿐만 아니라 '가게 이름'도 같이 봅니다. (허니콤보/방어 찾기 필수)
+    doc_texts = [f"{p['name']} {p['text']}" for p in place_docs]
+    
+    embeddings = embed_model.encode(doc_texts)
+    query_emb = embed_model.encode([user_query])
+    sim_scores = cosine_similarity(query_emb, embeddings)[0]
+    
+    passed = []
+    for i, score in enumerate(sim_scores):
+        if score >= threshold:
+            place_docs[i]['sim_score'] = score
+            passed.append(place_docs[i])
             
-            added = 0
-            for p in places:
-                pid = p.get('id')
-                if pid and pid not in all_places_dict:
-                    all_places_dict[pid] = p
-                    added += 1
-            print(f"  📄 {page+1}페이지 수집 중... (+{added}개)")
-            
-            next_token = data.get('nextPageToken')
-            if not next_token or len(all_places_dict) >= target_count: break
-            time.sleep(1.0) # 구글 API 딜레이 준수
-        except Exception as e:
-            print(f"  ❌ 에러 발생: {e}")
-            break
-            
-    return list(all_places_dict.values())
+    print(f"✂️ 하드 필터링: {len(place_docs)}개 중 {len(passed)}개 생존 (기준: {threshold})")
+    return passed
 
 # ==================================================================================
-# [4] 메인 분석 파이프라인
+# [4] 메인 파이프라인
 # ==================================================================================
 
 def search_and_analyze(categories, user_detail, lat, lng, radius_km):
-    category_str = " ".join(categories)
-    search_query = f"{category_str} {user_detail}".strip()
-    if not search_query: search_query = "맛집"
+    # 1. 검색어 준비 (200개 수집을 위한 키워드 분할)
+    search_keywords = [f"{cat} 맛집" for cat in categories]
+    if user_detail: search_keywords.append(f"{user_detail} 맛집")
+    if not search_keywords: search_keywords = ["맛집"]
+    
+    search_keywords = list(set(search_keywords)) # 중복 제거
+    
+    print(f"🕵️ 검색 키워드: {search_keywords} 로 수집 시작...")
 
-    # 1. 200개 대량 수집
-    places = get_bulk_places(search_query, lat, lng, radius_km, target_count=200)
-    if not places: return {"result": "❌ 검색 결과가 없습니다.", "stores": []}
+    # 2. 200개 데이터 수집 (키워드별로 돌면서 모으기)
+    all_raw_places = {}
+    for kw in search_keywords:
+        batch = get_bulk_places(kw, lat, lng, radius_km)
+        for p in batch:
+            if p.get('id') not in all_raw_places:
+                all_raw_places[p['id']] = p
+        if len(all_raw_places) >= 200: break # 200개 차면 중단
+    
+    print(f"✅ 총 {len(all_raw_places)}개 식당 확보 완료")
 
-    # 2. 거리 필터링 및 전처리
+    # 3. 전처리 (거리 계산 및 텍스트 추출)
     filtered_places = []
-    for p in places:
+    for p in all_raw_places.values():
         loc = p.get('location', {})
         dist = haversine_distance(lat, lng, loc.get('latitude', 0), loc.get('longitude', 0))
+        
         if dist <= radius_km:
             reviews = p.get('reviews', [])
+            # 빈 텍스트라도 이름으로 검색되게 처리
             review_text = " ".join([r.get('text', {}).get('text', '') for r in reviews])
             filtered_places.append({
                 "name": p.get('displayName', {}).get('text', '이름없음'),
-                "rating": p.get('rating', 0),
-                "count": p.get('userRatingCount', 0),
-                "reviews": reviews,
-                "text": review_text,
+                "rating": p.get('rating', 0), "count": p.get('userRatingCount', 0),
+                "reviews": reviews, "text": review_text,
                 "lat": loc.get('latitude'), "lng": loc.get('longitude'), "address": p.get('formattedAddress', '')
             })
-    
-    scanned_count = len(filtered_places)
-    
-    # 3. 하드 필터링 (의미적 유사도 0.3 기준)
-    valid_docs = [p for p in filtered_places if p['text'].strip()]
-    candidates = hard_filter_by_similarity(valid_docs, search_query, threshold=0.3)
-    analyzed_count = len(candidates)
 
-    if not candidates: return {"result": "⚠️ 충분히 관련 있는 식당이 없습니다.", "stores": []}
+    # 4. 하드 필터링 (사용자 상세 입력 기준)
+    # 리뷰가 없어도 가게 이름으로 살리기 위해 빈 텍스트 체크 제거
+    candidates = hard_filter_by_similarity(filtered_places, user_detail, threshold=0.3)
+    
+    if not candidates: return {"result": "❌ 관련 식당을 찾지 못했습니다.", "stores": []}
 
-    # 4. 종합 스코어링 (유사도 30, 평점 35, 리뷰수 25, 최신성 10)
+    # 5. 스코어링 (평점, 리뷰수, 유사도 반영)
     for p in candidates:
-        p['total_score'] = (p['sim_score'] * 0.30) + (p['rating']/5 * 0.35) + (calculate_popularity_score(p['count']) * 0.25) + (calculate_recency_score(p['reviews']) * 0.10)
+        # 인기도 점수 계산 (로그 스케일)
+        pop_score = min(np.log10(p['count'] + 1) / 4.0, 1.0) if p['count'] else 0
+        # 최신성 점수
+        rec_score = min(len(p['reviews']) / 5.0, 1.0) if p['reviews'] else 0
+        
+        p['total_score'] = (p['sim_score'] * 0.3) + (p['rating']/5 * 0.35) + (pop_score * 0.25) + (rec_score * 0.1)
         p['match_rate'] = int(p['total_score'] * 100)
 
-    # 5. 최종 리포트 생성 (상위 3개 분석)
+    # 6. 상위 3개 선정 및 리포트
     top_3 = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:3]
-    result_report = f"\n{'='*65}\n🏆 '{search_query}' AI 추천 리포트 (분석 대상: {len(candidates)}개)\n{'='*65}\n"
+    
+    report = f"\n{'='*60}\n🏆 추천 리포트 ({len(candidates)}개 후보 중 Top 3)\n{'='*60}\n"
     stores_data = []
     
     for rank, p in enumerate(top_3, 1):
-        features = get_naver_style_features(p['name'], p['reviews'])
-        kws = ", ".join(features.get('keywords', [])) if features.get('keywords') else "분석중..."
-        
-        result_report += f"🏅 {rank}위: {p['name']} (매칭 {p['match_rate']}%)\n"
-        result_report += f"   ⭐️ 평점: {p['rating']}점 | 리뷰 {p['count']}개\n"
-        result_report += f"   🏠 분위기: {features.get('atmosphere', '-')} | 👥 추천: {features.get('companion', '-')}\n"
-        result_report += f"   🎯 목  적: {features.get('purpose', '-')} | 🔑 키워드: {kws}\n"
-        result_report += "-" * 65 + "\n"
-        
+        feats = get_naver_style_features(p['name'], p['reviews'])
+        report += f"🏅 {rank}위: {p['name']} (매칭 {p['match_rate']}%)\n"
+        report += f"   ✨ {feats.get('purpose', '맛집')} | {feats.get('atmosphere', '분위기 좋음')}\n"
+        report += f"   🔑 {', '.join(feats.get('keywords', []))}\n"
+        report += "-"*60 + "\n"
         stores_data.append({"name": p['name'], "lat": p['lat'], "lng": p['lng'], "rating": p['rating'], "address": p['address']})
 
-    return {"result": result_report, "stores": stores_data, "scanned_count": scanned_count, "analyzed_count": analyzed_count}
+    return {"result": report, "stores": stores_data, "scanned_count": len(filtered_places), "analyzed_count": len(candidates)}
