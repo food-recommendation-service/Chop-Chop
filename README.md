@@ -1,7 +1,7 @@
 <div align="center">
 
 # 🍽️ Smart_Dining_Recommender
-### **개인 프로젝트**
+### **팀 프로젝트**
 **"사용자의 위치와 복합적인 취향을 반영한 머신러닝 기반 맛집 추천 서비스"**
 
 <br>
