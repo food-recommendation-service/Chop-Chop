@@ -3,7 +3,7 @@ import axios from 'axios';
 import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
 import './App.css';
 
-const GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY"); 
+const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
 const circleOptions = {
   strokeColor: "#007AFF",
