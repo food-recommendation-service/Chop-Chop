@@ -7,6 +7,7 @@ import json
 import re
 import time
 import os
+import math
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -55,10 +56,6 @@ def get_naver_style_features(place_name, reviews):
 # ==================================================================================
 
 def get_bulk_places(search_query, center_lat, center_lng, radius_km):
-    """
-    구글 API 호출 함수 (단일 키워드당 최대 60개)
-    깔끔하게 API 호출 역할만 수행합니다.
-    """
     url = "https://places.googleapis.com/v1/places:searchText"
     headers = {
         'Content-Type': 'application/json',
@@ -68,7 +65,6 @@ def get_bulk_places(search_query, center_lat, center_lng, radius_km):
     places_list = []
     next_token = None
     
-    # 3페이지(60개)까지만 수집 (구글 제한)
     for _ in range(3):
         payload = {
             "textQuery": search_query,
@@ -85,13 +81,15 @@ def get_bulk_places(search_query, center_lat, center_lng, radius_km):
         except: break
     return places_list
 
-def hard_filter_by_similarity(place_docs, user_query, threshold=0.3):
+def hybrid_filter_similarity(place_docs, user_query, threshold=0.15):
     """
-    하드 필터링: 가게 이름 + 리뷰 텍스트로 유사도 검사
+    [하이브리드 필터링 업데이트]
+    1. Rule-based: 검색 키워드가 이름이나 텍스트에 포함되면 무조건 합격 (최소 점수 보정)
+    2. Vector-based: 임베딩 유사도가 threshold 이상이면 합격
     """
     if not place_docs: return []
     
-    # [중요 보완] 리뷰뿐만 아니라 '가게 이름'도 같이 봅니다. (허니콤보/방어 찾기 필수)
+    # 가게 이름 + 리뷰 텍스트 결합
     doc_texts = [f"{p['name']} {p['text']}" for p in place_docs]
     
     embeddings = embed_model.encode(doc_texts)
@@ -99,12 +97,25 @@ def hard_filter_by_similarity(place_docs, user_query, threshold=0.3):
     sim_scores = cosine_similarity(query_emb, embeddings)[0]
     
     passed = []
+    clean_query = user_query.replace(" ", "") # 공백 제거 비교용
+    
     for i, score in enumerate(sim_scores):
-        if score >= threshold:
-            place_docs[i]['sim_score'] = score
-            passed.append(place_docs[i])
+        p = place_docs[i]
+        
+        # [Rule 1] 직접적인 키워드 매칭 (이름이나 리뷰에 단어가 포함된 경우)
+        if clean_query in p['name'].replace(" ","") or clean_query in p['text'].replace(" ",""):
+            p['sim_score'] = max(score, 0.6) # 검색어 포함 시 점수 보정 (0.6 미만이어도 합격)
+            p['filter_reason'] = "Keyword Match"
+            passed.append(p)
+            continue
             
-    print(f"✂️ 하드 필터링: {len(place_docs)}개 중 {len(passed)}개 생존 (기준: {threshold})")
+        # [Rule 2] 벡터 유사도 매칭 (관대한 기준 0.15)
+        if score >= threshold:
+            p['sim_score'] = score
+            p['filter_reason'] = "Vector Similarity"
+            passed.append(p)
+            
+    print(f"✂️ 하이브리드 필터링: {len(place_docs)}개 중 {len(passed)}개 생존")
     return passed
 
 # ==================================================================================
@@ -112,27 +123,24 @@ def hard_filter_by_similarity(place_docs, user_query, threshold=0.3):
 # ==================================================================================
 
 def search_and_analyze(categories, user_detail, lat, lng, radius_km):
-    # 1. 검색어 준비 (200개 수집을 위한 키워드 분할)
     search_keywords = [f"{cat} 맛집" for cat in categories]
     if user_detail: search_keywords.append(f"{user_detail} 맛집")
     if not search_keywords: search_keywords = ["맛집"]
     
-    search_keywords = list(set(search_keywords)) # 중복 제거
+    search_keywords = list(set(search_keywords))
     
-    print(f"🕵️ 검색 키워드: {search_keywords} 로 수집 시작...")
+    print(f"🕵️ 검색 키워드: {search_keywords} 수집 시작...")
 
-    # 2. 200개 데이터 수집 (키워드별로 돌면서 모으기)
     all_raw_places = {}
     for kw in search_keywords:
         batch = get_bulk_places(kw, lat, lng, radius_km)
         for p in batch:
             if p.get('id') not in all_raw_places:
                 all_raw_places[p['id']] = p
-        if len(all_raw_places) >= 200: break # 200개 차면 중단
+        if len(all_raw_places) >= 200: break
     
-    print(f"✅ 총 {len(all_raw_places)}개 식당 확보 완료")
+    print(f"✅ 총 {len(all_raw_places)}개 식당 확보")
 
-    # 3. 전처리 (거리 계산 및 텍스트 추출)
     filtered_places = []
     for p in all_raw_places.values():
         loc = p.get('location', {})
@@ -140,7 +148,6 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km):
         
         if dist <= radius_km:
             reviews = p.get('reviews', [])
-            # 빈 텍스트라도 이름으로 검색되게 처리
             review_text = " ".join([r.get('text', {}).get('text', '') for r in reviews])
             filtered_places.append({
                 "name": p.get('displayName', {}).get('text', '이름없음'),
@@ -149,26 +156,20 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km):
                 "lat": loc.get('latitude'), "lng": loc.get('longitude'), "address": p.get('formattedAddress', '')
             })
 
-    # 4. 하드 필터링 (사용자 상세 입력 기준)
-    # 리뷰가 없어도 가게 이름으로 살리기 위해 빈 텍스트 체크 제거
-    candidates = hard_filter_by_similarity(filtered_places, user_detail, threshold=0.3)
+    # [하이브리드 필터링으로 교체]
+    candidates = hybrid_filter_similarity(filtered_places, user_detail, threshold=0.15)
     
     if not candidates: return {"result": "❌ 관련 식당을 찾지 못했습니다.", "stores": []}
 
-    # 5. 스코어링 (평점, 리뷰수, 유사도 반영)
     for p in candidates:
-        # 인기도 점수 계산 (로그 스케일)
         pop_score = min(np.log10(p['count'] + 1) / 4.0, 1.0) if p['count'] else 0
-        # 최신성 점수
         rec_score = min(len(p['reviews']) / 5.0, 1.0) if p['reviews'] else 0
-        
         p['total_score'] = (p['sim_score'] * 0.3) + (p['rating']/5 * 0.35) + (pop_score * 0.25) + (rec_score * 0.1)
         p['match_rate'] = int(p['total_score'] * 100)
 
-    # 6. 상위 3개 선정 및 리포트
     top_3 = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:3]
     
-    report = f"\n{'='*60}\n🏆 추천 리포트 ({len(candidates)}개 후보 중 Top 3)\n{'='*60}\n"
+    report = f"\n{'='*60}\n🏆 추천 리포트 (필터링 통과 {len(candidates)}개 중 Top 3)\n{'='*60}\n"
     stores_data = []
     
     for rank, p in enumerate(top_3, 1):
