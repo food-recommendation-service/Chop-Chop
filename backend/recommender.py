@@ -15,8 +15,8 @@ load_dotenv()
 # ==================================================================================
 # [1] 설정
 # ==================================================================================
-GOOGLE_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "AIzaSyC-gSjkrWo8mjx8N_NR4h6a6Bk7taseW7s")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "AIzaSyC-gSjkrWo8mjx8N_NR4h6a6Bk7taseW7s")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 genai.configure(api_key=GEMINI_API_KEY)
 llm_model = genai.GenerativeModel('models/gemini-2.0-flash')
