@@ -1,8 +1,8 @@
-# Chop-Chop (촙촙)
+# Chop-Chop (찹찹)
 
 > **AI-Powered Smart Dining Recommendation Service**
 >
-> "맛집을 촙촙(빠르게) 찾아주고, 재료를 촙촙 썰듯 데이터를 분석합니다."
+> "맛집을 찹찹(빠르게) 찾아주고, 재료를 찹찹 썰듯 데이터를 분석합니다."
 
 <br>
 
