@@ -3,7 +3,7 @@ import axios from 'axios';
 import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
 import './App.css';
 
-const GOOGLE_MAPS_API_KEY = "AIzaSyC-gSjkrWo8mjx8N_NR4h6a6Bk7taseW7s"; 
+const GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY"); 
 
 const circleOptions = {
   strokeColor: "#007AFF",
@@ -40,7 +40,7 @@ function App() {
 
   const { isLoaded } = useJsApiLoader({
     id: 'google-map-script',
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    googleMapsApiKey: GOOGLE_API_KEY,
     language: 'ko' // 지도 언어 한국어로 설정
   });
 
