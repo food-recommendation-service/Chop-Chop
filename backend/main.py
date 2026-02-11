@@ -61,6 +61,7 @@ class RecommendRequest(BaseModel):
     user_detail: str  # 예: "조용하고 바다가 보이는"
     lat: float
     lng: float
+    filters: dict = {} # 필터 추가: 예) {"BusinessParking": 1, "GoodForKids": 1}
 
 def get_db():
     db = SessionLocal()
@@ -98,7 +99,8 @@ def get_recommendations(req: RecommendRequest):
             user_detail=req.user_detail,
             lat=req.lat,
             lng=req.lng,
-            radius_km=req.radius_km
+            radius_km=req.radius_km,
+            filters=req.filters # 추가된 필터 데이터 전달
         )
         return {"result": data["result"], "stores": data["stores"]}
     except Exception as e:
