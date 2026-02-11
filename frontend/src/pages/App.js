@@ -1,7 +1,12 @@
-import React, { useState } from 'react';
-import axios from 'axios';
-import { GoogleMap, useJsApiLoader, Marker, Circle } from '@react-google-maps/api';
-import './App.css';
+import React, { useState } from "react";
+import axios from "axios";
+import {
+  GoogleMap,
+  useJsApiLoader,
+  Marker,
+  Circle,
+} from "@react-google-maps/api";
+import "./App.css";
 
 const GOOGLE_API_KEY = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
 
@@ -15,23 +20,46 @@ const circleOptions = {
   draggable: false,
   editable: false,
   visible: true,
-  zIndex: 1
+  zIndex: 1,
 };
 
 // 태그 리스트 (한국어)
 const TAGS = [
-  "맛집", "카페", "술집", "베이커리", "이탈리안", "일식", "중식", "멕시칸", "인도요리",
-  "파인다이닝", "가성비", "뷰맛집", "아늑한", "활기찬", "로맨틱", "단체", "혼밥"
+  "맛집",
+  "카페",
+  "술집",
+  "베이커리",
+  "이탈리안",
+  "일식",
+  "중식",
+  "멕시칸",
+  "인도요리",
+  "파인다이닝",
+  "가성비",
+  "뷰맛집",
+  "아늑한",
+  "활기찬",
+  "로맨틱",
+  "단체",
+  "혼밥",
 ];
 
 function App() {
-  const [myLocation, setMyLocation] = useState({ lat: 37.5665, lng: 126.9780 }); // 기본 위치: 서울
+  const [myLocation, setMyLocation] = useState({ lat: 37.5665, lng: 126.978 }); // 기본 위치: 서울
   const [distance, setDistance] = useState(2.0);
-  
+
   const [selectedTags, setSelectedTags] = useState([]);
   const [userText, setUserText] = useState("");
-  
-  const [stores, setStores] = useState([]); 
+
+  // ✅ [추가됨] 하드 필터 상태 (0: 꺼짐, 1: 켜짐)
+  const [activeFilters, setActiveFilters] = useState({
+    BusinessParking: 0, // 주차
+    RestaurantsGoodForGroups: 0, // 단체
+    GoodForKids: 0, // 키즈존
+    DineIn: 0, // 매장식사
+  });
+
+  const [stores, setStores] = useState([]);
   const [result, setResult] = useState("");
   const [scannedCount, setScannedCount] = useState(0);
   const [analyzedCount, setAnalyzedCount] = useState(0);
@@ -39,15 +67,23 @@ function App() {
   const [loading, setLoading] = useState(false);
 
   const { isLoaded } = useJsApiLoader({
-    id: 'google-map-script',
+    id: "google-map-script",
     googleMapsApiKey: GOOGLE_API_KEY,
-    language: 'ko' // 지도 언어 한국어로 설정
+    language: "ko", // 지도 언어 한국어로 설정
   });
+
+  // ✅ 필터 토글 함수
+  const toggleFilter = (key) => {
+    setActiveFilters((prev) => ({
+      ...prev,
+      [key]: prev[key] === 0 ? 1 : 0,
+    }));
+  };
 
   const handleRecommend = async () => {
     if (selectedTags.length === 0 && userText.trim() === "") {
-        alert("키워드를 선택하거나 찾고싶은 맛집을 입력해주세요.");
-        return;
+      alert("키워드를 선택하거나 찾고싶은 맛집을 입력해주세요.");
+      return;
     }
 
     setLoading(true);
@@ -57,26 +93,29 @@ function App() {
     setAnalyzedCount(0);
 
     try {
-      const res = await axios.post('http://localhost:8000/recommend', {
-        radius_km: parseFloat(distance), 
-        categories: selectedTags, 
+      const res = await axios.post("http://localhost:8000/recommend", {
+        radius_km: parseFloat(distance),
+        categories: selectedTags,
         user_detail: userText,
-        lat: myLocation.lat, 
-        lng: myLocation.lng
+        lat: myLocation.lat,
+        lng: myLocation.lng,
+        filters: activeFilters, // ✅ 백엔드로 필터 정보 전송
       });
       setResult(res.data.result);
       setStores(res.data.stores || []);
       setScannedCount(res.data.scanned_count || 0);
       setAnalyzedCount(res.data.analyzed_count || 0);
-    } catch (e) { 
-        console.error(e);
-        alert("추천 중 오류가 발생했습니다."); 
+    } catch (e) {
+      console.error(e);
+      alert("추천 중 오류가 발생했습니다.");
     }
     setLoading(false);
   };
 
   const toggleTag = (tag) => {
-    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+    setSelectedTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
   };
 
   return (
@@ -94,34 +133,80 @@ function App() {
         </header>
 
         <div className="control-group">
-          <label className="control-label">탐색 반경: <span>{distance} km</span></label>
-          <input 
-            type="range" 
-            min="0.5" max="10.0" step="0.5" 
-            value={distance} 
-            onChange={e => setDistance(e.target.value)} 
+          <label className="control-label">
+            탐색 반경: <span>{distance} km</span>
+          </label>
+          <input
+            type="range"
+            min="0.5"
+            max="10.0"
+            step="0.5"
+            value={distance}
+            onChange={(e) => setDistance(e.target.value)}
             className="radius-slider"
           />
         </div>
 
+        {/* ✅ [추가됨] 필터 버튼 영역 */}
         <div className="control-group">
-            <label className="control-label">원하는 맛집을 설명해주세요</label>
-            <textarea 
-                value={userText}
-                onChange={(e) => setUserText(e.target.value)}
-                placeholder="예: 조용한 분위기에서 커피가 맛있는 카페"
-                className="text-input"
-            />
+          <label className="control-label">필수 옵션 (클릭시 필터링)</label>
+          <div
+            className="filter-grid"
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "8px",
+            }}
+          >
+            <button
+              className={`filter-btn ${activeFilters.BusinessParking ? "active" : ""}`}
+              onClick={() => toggleFilter("BusinessParking")}
+              style={btnStyle(activeFilters.BusinessParking)}
+            >
+              🚗 주차 가능
+            </button>
+            <button
+              className={`filter-btn ${activeFilters.RestaurantsGoodForGroups ? "active" : ""}`}
+              onClick={() => toggleFilter("RestaurantsGoodForGroups")}
+              style={btnStyle(activeFilters.RestaurantsGoodForGroups)}
+            >
+              👨‍👩‍👧‍👦 단체석
+            </button>
+            <button
+              className={`filter-btn ${activeFilters.GoodForKids ? "active" : ""}`}
+              onClick={() => toggleFilter("GoodForKids")}
+              style={btnStyle(activeFilters.GoodForKids)}
+            >
+              👶 예스키즈존
+            </button>
+            <button
+              className={`filter-btn ${activeFilters.DineIn ? "active" : ""}`}
+              onClick={() => toggleFilter("DineIn")}
+              style={btnStyle(activeFilters.DineIn)}
+            >
+              🍽️ 매장 식사
+            </button>
+          </div>
+        </div>
+
+        <div className="control-group">
+          <label className="control-label">원하는 맛집을 설명해주세요</label>
+          <textarea
+            value={userText}
+            onChange={(e) => setUserText(e.target.value)}
+            placeholder="예: 조용한 분위기에서 커피가 맛있는 카페"
+            className="text-input"
+          />
         </div>
 
         <div className="control-group">
           <label className="control-label">또는 키워드를 선택하세요</label>
           <div className="tag-list">
-            {TAGS.map(tag => (
-              <button 
-                key={tag} 
-                onClick={() => toggleTag(tag)} 
-                className={`tag-btn ${selectedTags.includes(tag) ? 'selected' : ''}`}
+            {TAGS.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => toggleTag(tag)}
+                className={`tag-btn ${selectedTags.includes(tag) ? "selected" : ""}`}
               >
                 {tag}
               </button>
@@ -130,38 +215,57 @@ function App() {
         </div>
 
         <div className="results-panel">
-            {result ? (
-              <>
-                <div className="stats-bar">
-                    <div className="stat-item">탐색된 식당: <span>{scannedCount}</span></div>
-                    <div className="stat-item">분석된 식당: <span>{analyzedCount}</span></div>
+          {result ? (
+            <>
+              <div className="stats-bar">
+                <div className="stat-item">
+                  탐색된 식당: <span>{scannedCount}</span>
                 </div>
-                <pre className="results-content">{result}</pre>
-              </>
-            ) : (
-                <div className="results-placeholder">
-                  <span className="results-placeholder-icon">🍽️</span>
-                  <p>AI 추천 결과가<br/>여기에 표시됩니다.</p>
+                <div className="stat-item">
+                  분석된 식당: <span>{analyzedCount}</span>
                 </div>
-            )}
+              </div>
+              <pre className="results-content">{result}</pre>
+            </>
+          ) : (
+            <div className="results-placeholder">
+              <span className="results-placeholder-icon">🍽️</span>
+              <p>
+                AI 추천 결과가
+                <br />
+                여기에 표시됩니다.
+              </p>
+            </div>
+          )}
         </div>
-        
-        <button onClick={handleRecommend} disabled={loading} className="action-button">
+
+        <button
+          onClick={handleRecommend}
+          disabled={loading}
+          className="action-button"
+        >
           {loading ? "분석 중..." : "맛집 찾기"}
         </button>
       </aside>
 
       <main className="map-container">
         {isLoaded && (
-          <GoogleMap 
-            mapContainerStyle={{ width: '100%', height: '100%' }} 
-            center={myLocation} 
+          <GoogleMap
+            mapContainerStyle={{ width: "100%", height: "100%" }}
+            center={myLocation}
             zoom={13}
-            options={{ 
-              styles: [ // Dark mode for map
+            options={{
+              styles: [
+                // Dark mode for map
                 { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-                { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-                { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+                {
+                  elementType: "labels.text.stroke",
+                  stylers: [{ color: "#242f3e" }],
+                },
+                {
+                  elementType: "labels.text.fill",
+                  stylers: [{ color: "#746855" }],
+                },
                 {
                   featureType: "administrative.locality",
                   elementType: "labels.text.fill",
@@ -237,47 +341,53 @@ function App() {
                   elementType: "labels.text.stroke",
                   stylers: [{ color: "#17263c" }],
                 },
-              ]
+              ],
             }}
           >
-            <Marker 
-                position={myLocation} 
-                draggable={true} 
-                onDragEnd={(e) => {
-                  const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-                  setMyLocation(newPos);
-                  
-                  // 핀을 옮길 때 기존 검색 결과와 리포트를 초기화합니다.
-                  // (새로운 위치에서 다시 검색하도록 유도)
-                  setStores([]);
-                  setResult("");
-                  setScannedCount(0);
-                  setAnalyzedCount(0);
-                }} 
-                title="현재 위치 (드래그로 이동)"
-                icon={{
-                  path: window.google && window.google.maps ? window.google.maps.SymbolPath.CIRCLE : "",
-                  scale: 8,
-                  fillColor: "#007AFF",
-                  fillOpacity: 1,
-                  strokeWeight: 2,
-                  strokeColor: "white",
-                }}
+            <Marker
+              position={myLocation}
+              draggable={true}
+              onDragEnd={(e) => {
+                const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                setMyLocation(newPos);
+
+                // 핀 이동 시 결과 초기화
+                setStores([]);
+                setResult("");
+                setScannedCount(0);
+                setAnalyzedCount(0);
+              }}
+              title="현재 위치 (드래그로 이동)"
+              icon={{
+                path:
+                  window.google && window.google.maps
+                    ? window.google.maps.SymbolPath.CIRCLE
+                    : "",
+                scale: 8,
+                fillColor: "#007AFF",
+                fillOpacity: 1,
+                strokeWeight: 2,
+                strokeColor: "white",
+              }}
             />
-            
+
             {stores.map((s, idx) => (
-              <Marker 
-                key={`store-${idx}`} 
-                position={{ lat: s.lat, lng: s.lng }} 
-                label={{ text: (idx + 1).toString(), color: "white", fontWeight: "bold" }} 
+              <Marker
+                key={`store-${idx}`}
+                position={{ lat: s.lat, lng: s.lng }}
+                label={{
+                  text: (idx + 1).toString(),
+                  color: "white",
+                  fontWeight: "bold",
+                }}
                 title={s.name}
               />
             ))}
-            
-            <Circle 
-              center={myLocation} 
-              radius={parseFloat(distance) * 1000} 
-              options={circleOptions} 
+
+            <Circle
+              center={myLocation}
+              radius={parseFloat(distance) * 1000}
+              options={circleOptions}
             />
           </GoogleMap>
         )}
@@ -285,5 +395,17 @@ function App() {
     </div>
   );
 }
+
+// 간단한 버튼 스타일 (인라인)
+const btnStyle = (isActive) => ({
+  padding: "8px",
+  border: "1px solid #444",
+  borderRadius: "8px",
+  backgroundColor: isActive ? "#007AFF" : "#2c2c2c",
+  color: "white",
+  cursor: "pointer",
+  fontSize: "0.9rem",
+  transition: "all 0.2s",
+});
 
 export default App;
