@@ -25,23 +25,23 @@ const circleOptions = {
 
 // 태그 리스트 (한국어)
 const TAGS = [
-  "맛집",
   "카페",
   "술집",
-  "베이커리",
+  "베이커리", // 업종
+  "한식",
   "이탈리안",
   "일식",
   "중식",
   "멕시칸",
-  "인도요리",
+  "인도요리", // 음식
   "파인다이닝",
   "가성비",
-  "뷰맛집",
-  "아늑한",
-  "활기찬",
-  "로맨틱",
-  "단체",
+  "브런치",
+  "뷔페", // 특성
   "혼밥",
+  "데이트",
+  "조용한",
+  "야외석", // 용도/분위기
 ];
 
 function App() {
@@ -135,7 +135,7 @@ function App() {
 
       <aside className="sidebar">
         <header className="header">
-          <h1 className="title">Taste Navigator AI</h1>
+          <h1 className="title">Chop-Chop</h1>
           <p className="subtitle">AI 맛집 추천 서비스</p>
         </header>
 
