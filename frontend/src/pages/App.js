@@ -51,12 +51,13 @@ function App() {
   const [selectedTags, setSelectedTags] = useState([]);
   const [userText, setUserText] = useState("");
 
-  // ✅ [추가됨] 하드 필터 상태 (0: 꺼짐, 1: 켜짐)
+  // ✅하드 필터 상태 (0: 꺼짐, 1: 켜짐)
   const [activeFilters, setActiveFilters] = useState({
     BusinessParking: 0, // 주차
     RestaurantsGoodForGroups: 0, // 단체
     GoodForKids: 0, // 키즈존
     DineIn: 0, // 매장식사
+    Vegetarian: 0, // 채식
   });
 
   const [stores, setStores] = useState([]);
@@ -154,7 +155,7 @@ function App() {
             className="filter-grid"
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr",
+              gridTemplateColumns: "1fr 1fr", // ✅ 2×3 그리드로 자동 확장
               gap: "8px",
             }}
           >
@@ -185,6 +186,13 @@ function App() {
               style={btnStyle(activeFilters.DineIn)}
             >
               🍽️ 매장 식사
+            </button>
+            <button
+              className={`filter-btn ${activeFilters.Vegetarian ? "active" : ""}`}
+              onClick={() => toggleFilter("Vegetarian")}
+              style={btnStyle(activeFilters.Vegetarian)}
+            >
+              🥗 채식 옵션
             </button>
           </div>
         </div>
