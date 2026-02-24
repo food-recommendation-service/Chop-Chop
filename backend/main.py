@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta
-from typing import List
+from typing import List, Dict, Optional # ✅ Dict, Optional 추가됨
 
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException
@@ -54,14 +54,16 @@ class UserCreate(BaseModel):
     username: str
     password: str
 
-# [수정됨] 사용자 텍스트 입력(user_detail) 추가
+# [수정됨] 사용자 텍스트 입력(user_detail) 및 필터 추가
 class RecommendRequest(BaseModel):
     radius_km: float
     categories: List[str]
     user_detail: str  # 예: "조용하고 바다가 보이는"
     lat: float
     lng: float
-    filters: dict = {} # 필터 추가: 예) {"BusinessParking": 1, "GoodForKids": 1}
+    # ✅ [변경점 1] 프론트엔드에서 보낸 필터 정보를 받기 위한 필드 추가
+    # 예: {"BusinessParking": 1, "GoodForKids": 0}
+    filters: Optional[Dict[str, int]] = None 
 
 def get_db():
     db = SessionLocal()
@@ -93,16 +95,23 @@ def login(user: UserCreate, db: Session = Depends(get_db)):
 @app.post("/recommend")
 def get_recommendations(req: RecommendRequest):
     try:
-        # recommender.py로 데이터 전달 (user_detail 포함)
+        # ✅ [변경점 2] recommender.py로 필터 정보(req.filters) 전달
         data = recommender.search_and_analyze(
             categories=req.categories,
             user_detail=req.user_detail,
             lat=req.lat,
             lng=req.lng,
             radius_km=req.radius_km,
-            filters=req.filters # 추가된 필터 데이터 전달
+            filters=req.filters # 여기가 핵심 추가 사항입니다
         )
-        return {"result": data["result"], "stores": data["stores"]}
+        
+        # ✅ [변경점 3] 개수 정보도 같이 반환 (UI 표시용)
+        return {
+            "result": data["result"], 
+            "stores": data["stores"],
+            "scanned_count": data.get("scanned_count", 0),
+            "analyzed_count": data.get("analyzed_count", 0)
+        }
     except Exception as e:
         print(f"Error: {e}")
         return {"result": f"오류 발생: {str(e)}", "stores": []}

@@ -54,7 +54,7 @@ def get_bulk_places(search_query, center_lat, center_lng, radius_km):
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_API_KEY,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.reviews,places.location,places.formattedAddress,places.editorialSummary,places.priceLevel,places.servesBeer,places.servesWine,places.parkingOptions,places.goodForGroups,places.menuForChildren,places.accessibilityOptions,places.outdoorSeating,places.dineIn,places.servesCocktails,nextPageToken'
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.reviews,places.location,places.formattedAddress,places.editorialSummary,places.priceLevel,places.servesBeer,places.servesWine,places.parkingOptions,places.goodForGroups,places.menuForChildren,places.accessibilityOptions,places.outdoorSeating,places.dineIn,places.servesCocktails,places.servesVegetarianFood,nextPageToken'
     }
     places_list = []
     next_token = None
@@ -196,15 +196,45 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
         return {"result": "❌ 조건에 맞는 식당이 없습니다.", "stores": []}
 
     # 5. 스코어링 및 가중치 계산
+    print("\n📊 [Scoring] 각 후보 점수 분해:")
     for p in candidates:
         pop_score = min(np.log10(p['count'] + 1) / 4.0, 1.0) if p['count'] else 0
         rec_score = min(len(p['reviews']) / 5.0, 1.0) if p['reviews'] else 0
-        p['total_score'] = (p['sim_score'] * 0.3) + (p['rating']/5 * 0.35) + (pop_score * 0.25) + (rec_score * 0.1)
+
+        s_sim    = p['sim_score'] * 0.6
+        s_rating = (p['rating'] / 5) * 0.2
+        s_pop    = pop_score * 0.15
+        s_rec    = rec_score * 0.05
+
+        p['total_score'] = s_sim + s_rating + s_pop + s_rec
         p['match_rate'] = int(p['total_score'] * 100)
+
+        # 어떤 요소가 점수를 가장 많이 올렸는지 dominant factor 계산
+        factor_map = {
+            "유사도": s_sim,
+            "별점": s_rating,
+            "리뷰수(인기)": s_pop,
+            "리뷰신뢰도": s_rec
+        }
+        dominant = max(factor_map, key=factor_map.get)
+
+        print(
+            f"   📌 {p['name']:<20} | "
+            f"유사도: {p['sim_score']:.3f}→{s_sim:.3f}  "
+            f"별점: {p['rating']:.1f}→{s_rating:.3f}  "
+            f"인기: {p['count']}건→{s_pop:.3f}  "
+            f"신뢰도: {s_rec:.3f}  "
+            f"합계: {p['total_score']:.3f}  "
+            f"🏆dominant: {dominant}"
+        )
 
     # 6. 상위 15개 추출
     top_candidates = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:15]
-    
+
+    print(f"\n🥇 [Top {len(top_candidates)} 확정]")
+    for rank, p in enumerate(top_candidates, 1):
+        print(f"   {rank}위: {p['name']} ({p['match_rate']}%)")
+
     # 7. 리포트 생성
     report = f"\n🏆 추천 리포트 (통과 {len(candidates)}개 중 상위 {len(top_candidates)}개)\n"
     stores_data = []
@@ -213,14 +243,3 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
         report += f"🏅 {rank}위: {p['name']} (매칭 {p['match_rate']}%)\n"
         if feats:
             report += f"   ✨ {feats.get('purpose', '맛집')} | {feats.get('atmosphere', '분위기 좋음')}\n"
-        
-        stores_data.append({
-            "name": p['name'], "lat": p['lat'], "lng": p['lng'], 
-            "rating": p['rating'], "address": p['address'],
-            "match_rate": p['match_rate'], "attributes": p['yelp_attrs'], "summary": p['summary']
-        })
-
-    return {
-        "result": report, "stores": stores_data, 
-        "scanned_count": len(filtered_places), "analyzed_count": len(candidates) 
-    }
