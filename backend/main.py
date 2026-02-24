@@ -1,6 +1,6 @@
 import os
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional # ✅ Dict, Optional 추가됨
+from typing import List, Dict, Optional
 
 import uvicorn
 from fastapi import FastAPI, Depends, HTTPException
@@ -13,13 +13,10 @@ from passlib.context import CryptContext
 from jose import jwt
 from dotenv import load_dotenv
 
-import recommender  # 작성한 recommender.py 임포트
+import recommender
 
 load_dotenv()
 
-# ==========================================
-# 설정 및 DB
-# ==========================================
 SECRET_KEY = os.getenv("SECRET_KEY", "jeju_secret_123")
 ALGORITHM = "HS256"
 DATABASE_URL = "sqlite:///./users.db"
@@ -36,12 +33,12 @@ class User(Base):
 
 Base.metadata.create_all(bind=engine)
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")  # ✅ 수정
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # 개발 편의를 위해 전체 허용
+    allow_origins=["http://localhost:3000"],  # ✅ 명시적 지정
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -79,6 +76,11 @@ def register(user: UserCreate, db: Session = Depends(get_db)):
     existing_user = db.query(User).filter(User.username == user.username).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="이미 존재하는 아이디입니다.")
+    
+    # ✅ 비밀번호 72바이트 제한
+    if len(user.password.encode('utf-8')) > 72:
+        raise HTTPException(status_code=400, detail="비밀번호는 72자 이하로 입력해주세요.")
+    
     new_user = User(username=user.username, hashed_password=pwd_context.hash(user.password))
     db.add(new_user)
     db.commit()
