@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
   GoogleMap,
@@ -45,19 +45,19 @@ const TAGS = [
 ];
 
 function App() {
-  const [myLocation, setMyLocation] = useState({ lat: 37.5665, lng: 126.978 }); // 기본 위치: 서울
+  const [myLocation, setMyLocation] = useState({ lat: 37.5665, lng: 126.978 });
   const [distance, setDistance] = useState(2.0);
-
+  const [showCircle, setShowCircle] = useState(true);
   const [selectedTags, setSelectedTags] = useState([]);
   const [userText, setUserText] = useState("");
 
   // ✅하드 필터 상태 (0: 꺼짐, 1: 켜짐)
   const [activeFilters, setActiveFilters] = useState({
-    BusinessParking: 0, // 주차
-    RestaurantsGoodForGroups: 0, // 단체
-    GoodForKids: 0, // 키즈존
-    DineIn: 0, // 매장식사
-    Vegetarian: 0, // 채식
+    BusinessParking: 0,
+    RestaurantsGoodForGroups: 0,
+    GoodForKids: 0,
+    DineIn: 0,
+    Vegetarian: 0,
   });
 
   const [stores, setStores] = useState([]);
@@ -70,10 +70,16 @@ function App() {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: GOOGLE_API_KEY,
-    language: "ko", // 지도 언어 한국어로 설정
+    language: "ko",
   });
 
-  // ✅ 필터 토글 함수
+  // ✅ Circle 재생성 로직
+  useEffect(() => {
+    setShowCircle(false);
+    const timer = setTimeout(() => setShowCircle(true), 10);
+    return () => clearTimeout(timer);
+  }, [myLocation.lat, myLocation.lng, distance]);
+
   const toggleFilter = (key) => {
     setActiveFilters((prev) => ({
       ...prev,
@@ -100,7 +106,7 @@ function App() {
         user_detail: userText,
         lat: myLocation.lat,
         lng: myLocation.lng,
-        filters: activeFilters, // ✅ 백엔드로 필터 정보 전송
+        filters: activeFilters,
       });
       setResult(res.data.result);
       setStores(res.data.stores || []);
@@ -148,14 +154,13 @@ function App() {
           />
         </div>
 
-        {/* ✅ [추가됨] 필터 버튼 영역 */}
         <div className="control-group">
           <label className="control-label">필수 옵션 (클릭시 필터링)</label>
           <div
             className="filter-grid"
             style={{
               display: "grid",
-              gridTemplateColumns: "1fr 1fr", // ✅ 2×3 그리드로 자동 확장
+              gridTemplateColumns: "1fr 1fr",
               gap: "8px",
             }}
           >
@@ -264,7 +269,6 @@ function App() {
             zoom={13}
             options={{
               styles: [
-                // Dark mode for map
                 { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
                 {
                   elementType: "labels.text.stroke",
@@ -359,7 +363,6 @@ function App() {
                 const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
                 setMyLocation(newPos);
 
-                // 핀 이동 시 결과 초기화
                 setStores([]);
                 setResult("");
                 setScannedCount(0);
@@ -392,11 +395,13 @@ function App() {
               />
             ))}
 
-            <Circle
-              center={myLocation}
-              radius={parseFloat(distance) * 1000}
-              options={circleOptions}
-            />
+            {showCircle && (
+              <Circle
+                center={myLocation}
+                radius={parseFloat(distance) * 1000}
+                options={circleOptions}
+              />
+            )}
           </GoogleMap>
         )}
       </main>
@@ -404,7 +409,6 @@ function App() {
   );
 }
 
-// 간단한 버튼 스타일 (인라인)
 const btnStyle = (isActive) => ({
   padding: "8px",
   border: "1px solid #444",
