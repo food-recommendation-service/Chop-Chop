@@ -44,7 +44,7 @@ const TAGS = [
   "야외석", // 용도/분위기
 ];
 
-function App() {
+const App = () => {
   const [myLocation, setMyLocation] = useState({ lat: 37.5665, lng: 126.978 });
   const [distance, setDistance] = useState(2.0);
   const [showCircle, setShowCircle] = useState(true);
@@ -72,6 +72,24 @@ function App() {
     googleMapsApiKey: GOOGLE_API_KEY,
     language: "ko",
   });
+
+  // ✅ 현재 위치 가져오기
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setMyLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.log("위치 권한 거부 또는 에러:", error);
+          // 기본값 유지: 서울시청
+        }
+      );
+    }
+  }, []);
 
   // ✅ Circle 재생성 로직
   useEffect(() => {
@@ -125,6 +143,17 @@ function App() {
     );
   };
 
+  const handleLocationReset = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        setMyLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      });
+    }
+  };
+
   return (
     <div className="App">
       {loading && (
@@ -135,7 +164,7 @@ function App() {
 
       <aside className="sidebar">
         <header className="header">
-          <h1 className="title">Chop-Chop</h1>
+          <h1 className="title">ChopChop</h1>
           <p className="subtitle">AI 맛집 추천 서비스</p>
         </header>
 
@@ -262,6 +291,15 @@ function App() {
       </aside>
 
       <main className="map-container">
+        {/* 현재 위치 버튼 */}
+        <button 
+          className="location-button"
+          onClick={handleLocationReset}
+          title="현재 위치로 이동"
+        >
+          📍
+        </button>
+
         {isLoaded && (
           <GoogleMap
             mapContainerStyle={{ width: "100%", height: "100%" }}
@@ -269,91 +307,50 @@ function App() {
             zoom={13}
             options={{
               styles: [
-                { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+                // 모든 라벨 숨김
+                { elementType: "labels", stylers: [{ visibility: "off" }] },
+                
+                // 배경
+                { elementType: "geometry", stylers: [{ color: "#1a1a1c" }] },
+                
+                // 도로만 표시
                 {
-                  elementType: "labels.text.stroke",
-                  stylers: [{ color: "#242f3e" }],
+                  featureType: "road",
+                  elementType: "geometry",
+                  stylers: [{ color: "#2c2c2e" }, { visibility: "on" }],
                 },
                 {
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#746855" }],
+                  featureType: "road.arterial",
+                  elementType: "geometry",
+                  stylers: [{ color: "#3a3a3c" }],
                 },
                 {
-                  featureType: "administrative.locality",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#d59563" }],
+                  featureType: "road.highway",
+                  elementType: "geometry",
+                  stylers: [{ color: "#48484a" }],
                 },
+                
+                // 물 (심플)
+                {
+                  featureType: "water",
+                  elementType: "geometry",
+                  stylers: [{ color: "#0a1929" }],
+                },
+                
+                // POI 완전 숨김
                 {
                   featureType: "poi",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#d59563" }],
+                  stylers: [{ visibility: "off" }],
                 },
-                {
-                  featureType: "poi.park",
-                  elementType: "geometry",
-                  stylers: [{ color: "#263c3f" }],
-                },
-                {
-                  featureType: "poi.park",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#6b9a76" }],
-                },
-                {
-                  featureType: "road",
-                  elementType: "geometry",
-                  stylers: [{ color: "#38414e" }],
-                },
-                {
-                  featureType: "road",
-                  elementType: "geometry.stroke",
-                  stylers: [{ color: "#212a37" }],
-                },
-                {
-                  featureType: "road",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#9ca5b3" }],
-                },
-                {
-                  featureType: "road.highway",
-                  elementType: "geometry",
-                  stylers: [{ color: "#746855" }],
-                },
-                {
-                  featureType: "road.highway",
-                  elementType: "geometry.stroke",
-                  stylers: [{ color: "#1f2835" }],
-                },
-                {
-                  featureType: "road.highway",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#f3d19c" }],
-                },
+                
+                // Transit 숨김
                 {
                   featureType: "transit",
-                  elementType: "geometry",
-                  stylers: [{ color: "#2f3948" }],
-                },
-                {
-                  featureType: "transit.station",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#d59563" }],
-                },
-                {
-                  featureType: "water",
-                  elementType: "geometry",
-                  stylers: [{ color: "#17263c" }],
-                },
-                {
-                  featureType: "water",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#515c6d" }],
-                },
-                {
-                  featureType: "water",
-                  elementType: "labels.text.stroke",
-                  stylers: [{ color: "#17263c" }],
+                  stylers: [{ visibility: "off" }],
                 },
               ],
+              disableDefaultUI: true, // 모든 기본 UI 제거
+              gestureHandling: "greedy",
             }}
           >
             <Marker
@@ -407,7 +404,7 @@ function App() {
       </main>
     </div>
   );
-}
+};
 
 const btnStyle = (isActive) => ({
   padding: "8px",
