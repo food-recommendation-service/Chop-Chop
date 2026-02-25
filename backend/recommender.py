@@ -243,3 +243,16 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
         report += f"🏅 {rank}위: {p['name']} (매칭 {p['match_rate']}%)\n"
         if feats:
             report += f"   ✨ {feats.get('purpose', '맛집')} | {feats.get('atmosphere', '분위기 좋음')}\n"
+
+        stores_data.append({
+            "name": p['name'],
+            "lat": p['lat'],
+            "lng": p['lng']
+        })
+    
+    return {
+        "result": report,
+        "stores": stores_data,
+        "scanned_count": len(all_raw_places),
+        "analyzed_count": len(candidates)
+    }
