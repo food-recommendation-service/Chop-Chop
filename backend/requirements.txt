@@ -1,1 +1,12 @@
+fastapi
+uvicorn
+pydantic
+sqlalchemy
+passlib[bcrypt]
+python-jose[cryptography]
 python-dotenv
+sentence-transformers
+scikit-learn
+numpy
+google-generativeai
+requests

@@ -5,14 +5,15 @@
 }
 
 .sidebar {
-  width: 450px;
+  width: 400px;
   background-color: #1c1c1e;
   padding: 24px;
+  overflow-y: auto;
+  border-right: 1px solid #38383a;
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #38383a;
-  box-shadow: 0 0 40px rgba(0, 0, 0, 0.3);
-  z-index: 10;
+  gap: 10px;
+  z-index: 10; /* ✅ 추가: 사이드바를 지도 위로 */
 }
 
 .map-container {
@@ -21,7 +22,7 @@
 }
 
 .header {
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 
 .title {
@@ -135,12 +136,14 @@
 
 
 .results-panel {
+  flex: 1; /* ✅ 추가: 남은 공간 모두 차지 */
+  min-height: 200px; 
   flex-grow: 1;
   background-color: #2c2c2e;
   border-radius: 12px;
   padding: 16px;
   overflow-y: auto;
-  margin-top: 24px;
+  margin-top: 20px;
   border: 1px solid #38383a;
 }
 
@@ -156,7 +159,7 @@
 
 .results-placeholder-icon {
   font-size: 32px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 
@@ -175,7 +178,7 @@
   padding: 10px 12px;
   background-color: #3a3a3c;
   border-radius: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 10px;
   font-size: 13px;
 }
 
@@ -215,4 +218,71 @@
 @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+}
+/* 지도 컨테이너 스타일 강화 */
+.map-container {
+  position: relative;
+  border-left: 1px solid #38383a;
+  box-shadow: inset 4px 0 8px rgba(0, 0, 0, 0.3);
+}
+
+/* 지도 위 오버레이 UI */
+.map-overlay {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  background: rgba(28, 28, 30, 0.95);
+  backdrop-filter: blur(10px);
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #38383a;
+  z-index: 10;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+.map-info {
+  color: #fff;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.map-info-label {
+  color: #8d8d92;
+  font-size: 12px;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.map-info-value {
+  color: #007aff;
+  font-weight: 600;
+}
+
+/* 현재 위치 버튼 */
+.location-button {
+  position: absolute;
+  bottom: 40px;
+  right: 20px;
+  z-index: 10;
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, #007AFF 0%, #0056b3 100%);
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+}
+
+.location-button:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 16px rgba(0, 122, 255, 0.6);
+}
+
+.location-button:active {
+  transform: scale(0.95);
 }
