@@ -307,40 +307,63 @@ const App = () => {
             zoom={13}
             options={{
               styles: [
-                // 모든 라벨 숨김
-                { elementType: "labels", stylers: [{ visibility: "off" }] },
-                
                 // 배경
                 { elementType: "geometry", stylers: [{ color: "#1a1a1c" }] },
                 
-                // 도로만 표시
+                // 기본 텍스트
+                { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a1c" }] },
+                { elementType: "labels.text.fill", stylers: [{ color: "#636366" }] },
+                
+                // ✅ 지명 (도시/지역) - 밝게 표시
+                {
+                  featureType: "administrative.locality",
+                  elementType: "labels.text.fill",
+                  stylers: [{ color: "#ffffff" }, { visibility: "on" }],
+                },
+                {
+                  featureType: "administrative.neighborhood",
+                  elementType: "labels.text.fill",
+                  stylers: [{ color: "#8d8d92" }, { visibility: "on" }],
+                },
+                
+                // ✅ 주요 장소명 (역, 건물 등)
+                {
+                  featureType: "poi",
+                  elementType: "labels.text.fill",
+                  stylers: [{ color: "#636366" }],
+                },
+                {
+                  featureType: "poi.business",
+                  stylers: [{ visibility: "off" }], // 일반 가게는 숨김
+                },
+                
+                // ✅ 도로 - 매우 얇게
                 {
                   featureType: "road",
                   elementType: "geometry",
-                  stylers: [{ color: "#2c2c2e" }, { visibility: "on" }],
+                  stylers: [{ color: "#2c2c2e" }, { visibility: "simplified" }],
                 },
                 {
-                  featureType: "road.arterial",
-                  elementType: "geometry",
-                  stylers: [{ color: "#3a3a3c" }],
+                  featureType: "road",
+                  elementType: "labels",
+                  stylers: [{ visibility: "off" }], // 도로명은 숨김
                 },
                 {
                   featureType: "road.highway",
                   elementType: "geometry",
-                  stylers: [{ color: "#48484a" }],
+                  stylers: [{ color: "#3a3a3c" }],
                 },
                 
-                // 물 (심플)
+                // 물
                 {
                   featureType: "water",
                   elementType: "geometry",
                   stylers: [{ color: "#0a1929" }],
                 },
-                
-                // POI 완전 숨김
                 {
-                  featureType: "poi",
-                  stylers: [{ visibility: "off" }],
+                  featureType: "water",
+                  elementType: "labels.text.fill",
+                  stylers: [{ color: "#007aff" }], // 한강 등 물 이름
                 },
                 
                 // Transit 숨김
@@ -349,7 +372,7 @@ const App = () => {
                   stylers: [{ visibility: "off" }],
                 },
               ],
-              disableDefaultUI: true, // 모든 기본 UI 제거
+              disableDefaultUI: true,
               gestureHandling: "greedy",
             }}
           >
