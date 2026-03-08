@@ -14,13 +14,11 @@ const Login = () => {
     setError("");
 
     try {
-      const res = await axios.post("http://localhost:8000/login", {
-        username,
-        password,
-      });
-
-      localStorage.setItem("token", res.data.access_token);
-      localStorage.setItem("username", username);
+      await axios.post(
+        "http://localhost:8000/login",
+        { username, password },
+        { withCredentials: true }
+      );
 
       navigate("/app");
     } catch (err) {

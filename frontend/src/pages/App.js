@@ -118,14 +118,18 @@ const App = () => {
     setAnalyzedCount(0);
 
     try {
-      const res = await axios.post("http://localhost:8000/recommend", {
-        radius_km: parseFloat(distance),
-        categories: selectedTags,
-        user_detail: userText,
-        lat: myLocation.lat,
-        lng: myLocation.lng,
-        filters: activeFilters,
-      });
+      const res = await axios.post(
+        "http://localhost:8000/recommend",
+        {
+          radius_km: parseFloat(distance),
+          categories: selectedTags,
+          user_detail: userText,
+          lat: myLocation.lat,
+          lng: myLocation.lng,
+          filters: activeFilters,
+        },
+        { withCredentials: true }
+      );
       setResult(res.data.result);
       setStores(res.data.stores || []);
       setScannedCount(res.data.scanned_count || 0);
