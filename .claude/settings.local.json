@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(where:*)",
+      "Bash(node:*)",
+      "Bash(pip show:*)",
+      "Bash(where uvicorn:*)",
+      "Read(//c/Users/jackj/.local/bin/**)",
+      "Read(//c/Users/jackj/**)",
+      "Bash(curl:*)",
+      "Bash(timeout 10 venv/Scripts/uvicorn.exe main:app:*)"
+    ]
+  }
+}

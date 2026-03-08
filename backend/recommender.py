@@ -8,8 +8,27 @@ import re
 import time
 import os
 import math
+import logging
 from dotenv import load_dotenv
 from mapping_utils import map_google_to_yelp_style
+
+logger = logging.getLogger(__name__)
+
+# ==========================================
+# 상수 정의
+# ==========================================
+MAX_PLACES_TO_COLLECT = 150
+TOP_CANDIDATES_COUNT = 15
+MAX_REVIEWS_PER_PLACE = 10
+MAX_REVIEW_CHARS = 500
+SIM_THRESHOLD = 0.15
+
+SCORE_WEIGHTS = {
+    'similarity': 0.6,
+    'rating': 0.2,
+    'popularity': 0.15,
+    'review_trust': 0.05,
+}
 
 # 1. 환경 변수 및 설정
 env_path = os.path.join(os.path.dirname(__file__), '.env')
@@ -98,31 +117,36 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
     search_keywords = list(set([f"{cat} 맛집" for cat in categories] + ([f"{user_detail} 맛집"] if user_detail else [])))
     
     # 2. 데이터 수집
-    print(f"🕵️ 수집 시작: {search_keywords}")
+    logger.info(f"🕵️ 수집 시작: {search_keywords}")
     all_raw_places = {}
     for kw in search_keywords:
         batch = get_bulk_places(kw, lat, lng, radius_km)
         for p in batch:
             if p.get('id') not in all_raw_places:
                 all_raw_places[p['id']] = p
-        if len(all_raw_places) >= 150: 
+        if len(all_raw_places) >= MAX_PLACES_TO_COLLECT:
             break
-    
-    print(f"✅ 총 {len(all_raw_places)}개 유니크 식당 확보")
+
+    logger.info(f"✅ 총 {len(all_raw_places)}개 유니크 식당 확보")
 
     # 3. [Stage 1] 반경 및 하드 필터링
-    print("\n🔍 [Stage 1] 반경 및 하드 필터링 진행 중...")
+    logger.info("🔍 [Stage 1] 반경 및 하드 필터링 진행 중...")
     filtered_places = []
     hard_dropped_count = 0
     radius_dropped_count = 0
 
     safe_filters = filters if isinstance(filters, dict) else (dict(filters) if filters else {})
     if safe_filters:
-        print(f"🐛 [DEBUG] 적용될 필수 필터: {safe_filters}")
+        logger.debug(f"적용될 필수 필터: {safe_filters}")
 
     for p in all_raw_places.values():
         loc = p.get('location', {})
-        dist = haversine_distance(lat, lng, loc.get('latitude', 0), loc.get('longitude', 0))
+        place_lat = loc.get('latitude')
+        place_lng = loc.get('longitude')
+        if place_lat is None or place_lng is None:
+            logger.warning(f"좌표 누락으로 제외: {p.get('displayName', {}).get('text', '이름없음')}")
+            continue
+        dist = haversine_distance(lat, lng, place_lat, place_lng)
         
         # 반경 체크
         if dist > radius_km:
@@ -141,34 +165,36 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
                     drop_reason = key
                     break
         
-        if not is_match: 
-            print(f"   🚫 [제외됨] {p.get('displayName', {}).get('text')} (이유: {drop_reason} 없음)")
+        if not is_match:
+            logger.debug(f"[제외됨] {p.get('displayName', {}).get('text')} (이유: {drop_reason} 없음)")
             hard_dropped_count += 1
-            continue 
+            continue
 
         reviews = p.get('reviews', [])
-        review_text = " ".join([r.get('text', {}).get('text', '') for r in reviews])
-        
+        review_text = " ".join([
+            r.get('text', {}).get('text', '')[:MAX_REVIEW_CHARS]
+            for r in reviews[:MAX_REVIEWS_PER_PLACE]
+        ])
+
         filtered_places.append({
             "name": p.get('displayName', {}).get('text', '이름없음'),
-            "rating": p.get('rating', 0), 
+            "rating": p.get('rating', 0),
             "count": p.get('userRatingCount', 0),
-            "reviews": reviews, 
+            "reviews": reviews,
             "text": review_text,
-            "lat": loc.get('latitude'), 
-            "lng": loc.get('longitude'), 
+            "lat": place_lat,
+            "lng": place_lng,
             "address": p.get('formattedAddress', ''),
             "summary": p.get('editorialSummary', {}).get('text', ''),
             "yelp_attrs": yelp_style_attr
         })
 
-    print(f"✂️ 반경 필터링 결과: 총 {radius_dropped_count}개 식당 반경 초과로 제외됨.")
-    print(f"✂️ 하드 필터링 결과: 총 {hard_dropped_count}개 식당 필수 옵션 미달로 제외됨.")
-    print(f"✅ Stage 1 통과 식당: {len(filtered_places)}개")
+    logger.info(f"반경 초과 제외: {radius_dropped_count}개, 하드필터 제외: {hard_dropped_count}개")
+    logger.info(f"✅ Stage 1 통과 식당: {len(filtered_places)}개")
 
-    # 4. 🔥 [Stage 2] 소프트 필터링 (임베딩 유사도 분석) - 여기가 빠져서 에러 났던 것!
-    print("\n🧠 [Stage 2] 소프트 필터링(유사도 분석) 진행 중...")
-    threshold = 0.01 
+    # 4. [Stage 2] 소프트 필터링 (임베딩 유사도 분석)
+    logger.info("🧠 [Stage 2] 소프트 필터링(유사도 분석) 진행 중...")
+    threshold = SIM_THRESHOLD
     candidates = []
     soft_dropped_count = 0
 
@@ -186,60 +212,51 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
             if score >= threshold:
                 candidates.append(p)
             else:
-                print(f"   📉 [유사도 탈락] {p['name']} (점수: {score:.4f} < 기준: {threshold})")
                 soft_dropped_count += 1
-    
-    print(f"✂️ 소프트 필터링 결과: 총 {soft_dropped_count}개 식당 제외됨.")
-    print(f"✅ 최종 후보군: {len(candidates)}개 식당 (스코어링 대상)")
+
+    logger.info(f"소프트 필터링 제외: {soft_dropped_count}개")
+    logger.info(f"✅ 최종 후보군: {len(candidates)}개 식당 (스코어링 대상)")
 
     if not candidates: 
         return {"result": "❌ 조건에 맞는 식당이 없습니다.", "stores": []}
 
     # 5. 스코어링 및 가중치 계산
-    print("\n📊 [Scoring] 각 후보 점수 분해:")
+    logger.info("📊 [Scoring] 스코어링 진행 중...")
     for p in candidates:
         pop_score = min(np.log10(p['count'] + 1) / 4.0, 1.0) if p['count'] else 0
         rec_score = min(len(p['reviews']) / 5.0, 1.0) if p['reviews'] else 0
 
-        s_sim    = p['sim_score'] * 0.6
-        s_rating = (p['rating'] / 5) * 0.2
-        s_pop    = pop_score * 0.15
-        s_rec    = rec_score * 0.05
+        s_sim    = p['sim_score'] * SCORE_WEIGHTS['similarity']
+        s_rating = (p['rating'] / 5) * SCORE_WEIGHTS['rating']
+        s_pop    = pop_score * SCORE_WEIGHTS['popularity']
+        s_rec    = rec_score * SCORE_WEIGHTS['review_trust']
 
         p['total_score'] = s_sim + s_rating + s_pop + s_rec
         p['match_rate'] = int(p['total_score'] * 100)
 
-        # 어떤 요소가 점수를 가장 많이 올렸는지 dominant factor 계산
-        factor_map = {
-            "유사도": s_sim,
-            "별점": s_rating,
-            "리뷰수(인기)": s_pop,
-            "리뷰신뢰도": s_rec
-        }
-        dominant = max(factor_map, key=factor_map.get)
+    # 6. 상위 N개 추출
+    top_candidates = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:TOP_CANDIDATES_COUNT]
 
-        print(
-            f"   📌 {p['name']:<20} | "
-            f"유사도: {p['sim_score']:.3f}→{s_sim:.3f}  "
-            f"별점: {p['rating']:.1f}→{s_rating:.3f}  "
-            f"인기: {p['count']}건→{s_pop:.3f}  "
-            f"신뢰도: {s_rec:.3f}  "
-            f"합계: {p['total_score']:.3f}  "
-            f"🏆dominant: {dominant}"
-        )
-
-    # 6. 상위 15개 추출
-    top_candidates = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:15]
-
-    print(f"\n🥇 [Top {len(top_candidates)} 확정]")
-    for rank, p in enumerate(top_candidates, 1):
-        print(f"   {rank}위: {p['name']} ({p['match_rate']}%)")
+    logger.info(f"🥇 Top {len(top_candidates)} 확정")
 
     # 7. 리포트 생성
-    report = f"\n🏆 추천 리포트 (통과 {len(candidates)}개 중 상위 {len(top_candidates)}개)\n"
+    report = f"\n추천 리포트 (통과 {len(candidates)}개 중 상위 {len(top_candidates)}개)\n"
     stores_data = []
     for rank, p in enumerate(top_candidates, 1):
         feats = get_naver_style_features(p['name'], p['reviews']) if rank <= 5 else {}
         report += f"🏅 {rank}위: {p['name']} (매칭 {p['match_rate']}%)\n"
         if feats:
             report += f"   ✨ {feats.get('purpose', '맛집')} | {feats.get('atmosphere', '분위기 좋음')}\n"
+
+        stores_data.append({
+            "name": p['name'],
+            "lat": p['lat'],
+            "lng": p['lng']
+        })
+    
+    return {
+        "result": report,
+        "stores": stores_data,
+        "scanned_count": len(all_raw_places),
+        "analyzed_count": len(candidates)
+    }

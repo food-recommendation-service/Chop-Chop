@@ -25,26 +25,26 @@ const circleOptions = {
 
 // 태그 리스트 (한국어)
 const TAGS = [
-  "맛집",
   "카페",
   "술집",
-  "베이커리",
+  "베이커리", // 업종
+  "한식",
   "이탈리안",
   "일식",
   "중식",
   "멕시칸",
-  "인도요리",
+  "인도요리", // 음식
   "파인다이닝",
   "가성비",
-  "뷰맛집",
-  "아늑한",
-  "활기찬",
-  "로맨틱",
-  "단체",
+  "브런치",
+  "뷔페", // 특성
   "혼밥",
+  "데이트",
+  "조용한",
+  "야외석", // 용도/분위기
 ];
 
-function App() {
+const App = () => {
   const [myLocation, setMyLocation] = useState({ lat: 37.5665, lng: 126.978 });
   const [distance, setDistance] = useState(2.0);
   const [showCircle, setShowCircle] = useState(true);
@@ -73,6 +73,24 @@ function App() {
     language: "ko",
   });
 
+  // ✅ 현재 위치 가져오기
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setMyLocation({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+          });
+        },
+        (error) => {
+          console.log("위치 권한 거부 또는 에러:", error);
+          // 기본값 유지: 서울시청
+        }
+      );
+    }
+  }, []);
+
   // ✅ Circle 재생성 로직
   useEffect(() => {
     setShowCircle(false);
@@ -100,14 +118,18 @@ function App() {
     setAnalyzedCount(0);
 
     try {
-      const res = await axios.post("http://localhost:8000/recommend", {
-        radius_km: parseFloat(distance),
-        categories: selectedTags,
-        user_detail: userText,
-        lat: myLocation.lat,
-        lng: myLocation.lng,
-        filters: activeFilters,
-      });
+      const res = await axios.post(
+        "http://localhost:8000/recommend",
+        {
+          radius_km: parseFloat(distance),
+          categories: selectedTags,
+          user_detail: userText,
+          lat: myLocation.lat,
+          lng: myLocation.lng,
+          filters: activeFilters,
+        },
+        { withCredentials: true }
+      );
       setResult(res.data.result);
       setStores(res.data.stores || []);
       setScannedCount(res.data.scanned_count || 0);
@@ -125,6 +147,17 @@ function App() {
     );
   };
 
+  const handleLocationReset = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        setMyLocation({
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+        });
+      });
+    }
+  };
+
   return (
     <div className="App">
       {loading && (
@@ -135,7 +168,7 @@ function App() {
 
       <aside className="sidebar">
         <header className="header">
-          <h1 className="title">Taste Navigator AI</h1>
+          <h1 className="title">ChopChop</h1>
           <p className="subtitle">AI 맛집 추천 서비스</p>
         </header>
 
@@ -262,6 +295,15 @@ function App() {
       </aside>
 
       <main className="map-container">
+        {/* 현재 위치 버튼 */}
+        <button 
+          className="location-button"
+          onClick={handleLocationReset}
+          title="현재 위치로 이동"
+        >
+          📍
+        </button>
+
         {isLoaded && (
           <GoogleMap
             mapContainerStyle={{ width: "100%", height: "100%" }}
@@ -269,91 +311,73 @@ function App() {
             zoom={13}
             options={{
               styles: [
-                { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-                {
-                  elementType: "labels.text.stroke",
-                  stylers: [{ color: "#242f3e" }],
-                },
-                {
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#746855" }],
-                },
+                // 배경
+                { elementType: "geometry", stylers: [{ color: "#1a1a1c" }] },
+                
+                // 기본 텍스트
+                { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a1c" }] },
+                { elementType: "labels.text.fill", stylers: [{ color: "#636366" }] },
+                
+                // ✅ 지명 (도시/지역) - 밝게 표시
                 {
                   featureType: "administrative.locality",
                   elementType: "labels.text.fill",
-                  stylers: [{ color: "#d59563" }],
+                  stylers: [{ color: "#ffffff" }, { visibility: "on" }],
                 },
+                {
+                  featureType: "administrative.neighborhood",
+                  elementType: "labels.text.fill",
+                  stylers: [{ color: "#8d8d92" }, { visibility: "on" }],
+                },
+                
+                // ✅ 주요 장소명 (역, 건물 등)
                 {
                   featureType: "poi",
                   elementType: "labels.text.fill",
-                  stylers: [{ color: "#d59563" }],
+                  stylers: [{ color: "#636366" }],
                 },
                 {
-                  featureType: "poi.park",
-                  elementType: "geometry",
-                  stylers: [{ color: "#263c3f" }],
+                  featureType: "poi.business",
+                  stylers: [{ visibility: "off" }], // 일반 가게는 숨김
                 },
-                {
-                  featureType: "poi.park",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#6b9a76" }],
-                },
+                
+                // ✅ 도로 - 매우 얇게
                 {
                   featureType: "road",
                   elementType: "geometry",
-                  stylers: [{ color: "#38414e" }],
+                  stylers: [{ color: "#2c2c2e" }, { visibility: "simplified" }],
                 },
                 {
                   featureType: "road",
-                  elementType: "geometry.stroke",
-                  stylers: [{ color: "#212a37" }],
-                },
-                {
-                  featureType: "road",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#9ca5b3" }],
+                  elementType: "labels",
+                  stylers: [{ visibility: "off" }], // 도로명은 숨김
                 },
                 {
                   featureType: "road.highway",
                   elementType: "geometry",
-                  stylers: [{ color: "#746855" }],
+                  stylers: [{ color: "#3a3a3c" }],
+                },
+                
+                // 물
+                {
+                  featureType: "water",
+                  elementType: "geometry",
+                  stylers: [{ color: "#0a1929" }],
                 },
                 {
-                  featureType: "road.highway",
-                  elementType: "geometry.stroke",
-                  stylers: [{ color: "#1f2835" }],
-                },
-                {
-                  featureType: "road.highway",
+                  featureType: "water",
                   elementType: "labels.text.fill",
-                  stylers: [{ color: "#f3d19c" }],
+                  stylers: [{ color: "#007aff" }], // 한강 등 물 이름
                 },
+                
+                // Transit 숨김
                 {
                   featureType: "transit",
-                  elementType: "geometry",
-                  stylers: [{ color: "#2f3948" }],
-                },
-                {
-                  featureType: "transit.station",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#d59563" }],
-                },
-                {
-                  featureType: "water",
-                  elementType: "geometry",
-                  stylers: [{ color: "#17263c" }],
-                },
-                {
-                  featureType: "water",
-                  elementType: "labels.text.fill",
-                  stylers: [{ color: "#515c6d" }],
-                },
-                {
-                  featureType: "water",
-                  elementType: "labels.text.stroke",
-                  stylers: [{ color: "#17263c" }],
+                  stylers: [{ visibility: "off" }],
                 },
               ],
+              disableDefaultUI: true,
+              gestureHandling: "greedy",
             }}
           >
             <Marker
@@ -407,7 +431,7 @@ function App() {
       </main>
     </div>
   );
-}
+};
 
 const btnStyle = (isActive) => ({
   padding: "8px",
