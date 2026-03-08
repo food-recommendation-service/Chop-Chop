@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 import {
   GoogleMap,
   useJsApiLoader,
@@ -23,35 +24,53 @@ const circleOptions = {
   zIndex: 1,
 };
 
-// 태그 리스트 (한국어)
 const TAGS = [
   "카페",
   "술집",
-  "베이커리", // 업종
+  "베이커리",
   "한식",
   "이탈리안",
   "일식",
   "중식",
   "멕시칸",
-  "인도요리", // 음식
+  "인도요리",
   "파인다이닝",
   "가성비",
   "브런치",
-  "뷔페", // 특성
+  "뷔페",
   "혼밥",
   "데이트",
   "조용한",
-  "야외석", // 용도/분위기
+  "야외석",
 ];
 
+const StarRating = ({ value, onChange }) => {
+  const [hovered, setHovered] = useState(0);
+  return (
+    <div className="star-rating">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <span
+          key={star}
+          className={`star ${star <= (hovered || value) ? "filled" : ""}`}
+          onMouseEnter={() => setHovered(star)}
+          onMouseLeave={() => setHovered(0)}
+          onClick={() => onChange(star)}
+        >
+          ★
+        </span>
+      ))}
+    </div>
+  );
+};
+
 const App = () => {
+  const navigate = useNavigate();
   const [myLocation, setMyLocation] = useState({ lat: 37.5665, lng: 126.978 });
   const [distance, setDistance] = useState(2.0);
   const [showCircle, setShowCircle] = useState(true);
   const [selectedTags, setSelectedTags] = useState([]);
   const [userText, setUserText] = useState("");
 
-  // ✅하드 필터 상태 (0: 꺼짐, 1: 켜짐)
   const [activeFilters, setActiveFilters] = useState({
     BusinessParking: 0,
     RestaurantsGoodForGroups: 0,
@@ -64,6 +83,9 @@ const App = () => {
   const [result, setResult] = useState("");
   const [scannedCount, setScannedCount] = useState(0);
   const [analyzedCount, setAnalyzedCount] = useState(0);
+  const [logId, setLogId] = useState(null);
+  const [ratings, setRatings] = useState({});       // {restaurant_name: rating}
+  const [ratingMsg, setRatingMsg] = useState("");   // 저장 성공/실패 메시지
 
   const [loading, setLoading] = useState(false);
 
@@ -73,7 +95,6 @@ const App = () => {
     language: "ko",
   });
 
-  // ✅ 현재 위치 가져오기
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -85,13 +106,11 @@ const App = () => {
         },
         (error) => {
           console.log("위치 권한 거부 또는 에러:", error);
-          // 기본값 유지: 서울시청
         }
       );
     }
   }, []);
 
-  // ✅ Circle 재생성 로직
   useEffect(() => {
     setShowCircle(false);
     const timer = setTimeout(() => setShowCircle(true), 10);
@@ -116,6 +135,9 @@ const App = () => {
     setStores([]);
     setScannedCount(0);
     setAnalyzedCount(0);
+    setLogId(null);
+    setRatings({});
+    setRatingMsg("");
 
     try {
       const res = await axios.post(
@@ -134,6 +156,7 @@ const App = () => {
       setStores(res.data.stores || []);
       setScannedCount(res.data.scanned_count || 0);
       setAnalyzedCount(res.data.analyzed_count || 0);
+      setLogId(res.data.log_id || null);
     } catch (e) {
       console.error(e);
       alert("추천 중 오류가 발생했습니다.");
@@ -141,9 +164,27 @@ const App = () => {
     setLoading(false);
   };
 
+  const handleRate = async (restaurantName, star) => {
+    if (!logId) return;
+    setRatings((prev) => ({ ...prev, [restaurantName]: star }));
+    try {
+      await axios.post(
+        "http://localhost:8000/rate",
+        { search_log_id: logId, restaurant_name: restaurantName, rating: star },
+        { withCredentials: true }
+      );
+      setRatingMsg("별점이 저장되었습니다.");
+      setTimeout(() => setRatingMsg(""), 2000);
+    } catch (e) {
+      console.error(e);
+      setRatingMsg("별점 저장에 실패했습니다.");
+      setTimeout(() => setRatingMsg(""), 2000);
+    }
+  };
+
   const toggleTag = (tag) => {
     setSelectedTags((prev) =>
-      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
     );
   };
 
@@ -158,6 +199,11 @@ const App = () => {
     }
   };
 
+  const handleLogout = async () => {
+    await axios.post("http://localhost:8000/logout", {}, { withCredentials: true });
+    navigate("/login");
+  };
+
   return (
     <div className="App">
       {loading && (
@@ -168,8 +214,16 @@ const App = () => {
 
       <aside className="sidebar">
         <header className="header">
-          <h1 className="title">ChopChop</h1>
-          <p className="subtitle">AI 맛집 추천 서비스</p>
+          <div className="header-top">
+            <div>
+              <h1 className="title">ChopChop</h1>
+              <p className="subtitle">AI 맛집 추천 서비스</p>
+            </div>
+            <div className="header-actions">
+              <button className="nav-btn" onClick={() => navigate("/mypage")}>마이페이지</button>
+              <button className="nav-btn logout-btn" onClick={handleLogout}>로그아웃</button>
+            </div>
+          </div>
         </header>
 
         <div className="control-group">
@@ -272,6 +326,24 @@ const App = () => {
                 </div>
               </div>
               <pre className="results-content">{result}</pre>
+
+              {stores.length > 0 && logId && (
+                <div className="rating-section">
+                  <p className="rating-title">추천 식당 별점 평가</p>
+                  {ratingMsg && <p className="rating-msg">{ratingMsg}</p>}
+                  {stores.map((s, idx) => (
+                    <div key={idx} className="rating-row">
+                      <span className="rating-name">
+                        {idx + 1}. {s.name}
+                      </span>
+                      <StarRating
+                        value={ratings[s.name] || 0}
+                        onChange={(star) => handleRate(s.name, star)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           ) : (
             <div className="results-placeholder">
@@ -295,8 +367,7 @@ const App = () => {
       </aside>
 
       <main className="map-container">
-        {/* 현재 위치 버튼 */}
-        <button 
+        <button
           className="location-button"
           onClick={handleLocationReset}
           title="현재 위치로 이동"
@@ -311,14 +382,9 @@ const App = () => {
             zoom={13}
             options={{
               styles: [
-                // 배경
                 { elementType: "geometry", stylers: [{ color: "#1a1a1c" }] },
-                
-                // 기본 텍스트
                 { elementType: "labels.text.stroke", stylers: [{ color: "#1a1a1c" }] },
                 { elementType: "labels.text.fill", stylers: [{ color: "#636366" }] },
-                
-                // ✅ 지명 (도시/지역) - 밝게 표시
                 {
                   featureType: "administrative.locality",
                   elementType: "labels.text.fill",
@@ -329,8 +395,6 @@ const App = () => {
                   elementType: "labels.text.fill",
                   stylers: [{ color: "#8d8d92" }, { visibility: "on" }],
                 },
-                
-                // ✅ 주요 장소명 (역, 건물 등)
                 {
                   featureType: "poi",
                   elementType: "labels.text.fill",
@@ -338,10 +402,8 @@ const App = () => {
                 },
                 {
                   featureType: "poi.business",
-                  stylers: [{ visibility: "off" }], // 일반 가게는 숨김
+                  stylers: [{ visibility: "off" }],
                 },
-                
-                // ✅ 도로 - 매우 얇게
                 {
                   featureType: "road",
                   elementType: "geometry",
@@ -350,15 +412,13 @@ const App = () => {
                 {
                   featureType: "road",
                   elementType: "labels",
-                  stylers: [{ visibility: "off" }], // 도로명은 숨김
+                  stylers: [{ visibility: "off" }],
                 },
                 {
                   featureType: "road.highway",
                   elementType: "geometry",
                   stylers: [{ color: "#3a3a3c" }],
                 },
-                
-                // 물
                 {
                   featureType: "water",
                   elementType: "geometry",
@@ -367,10 +427,8 @@ const App = () => {
                 {
                   featureType: "water",
                   elementType: "labels.text.fill",
-                  stylers: [{ color: "#007aff" }], // 한강 등 물 이름
+                  stylers: [{ color: "#007aff" }],
                 },
-                
-                // Transit 숨김
                 {
                   featureType: "transit",
                   stylers: [{ visibility: "off" }],
@@ -386,11 +444,12 @@ const App = () => {
               onDragEnd={(e) => {
                 const newPos = { lat: e.latLng.lat(), lng: e.latLng.lng() };
                 setMyLocation(newPos);
-
                 setStores([]);
                 setResult("");
                 setScannedCount(0);
                 setAnalyzedCount(0);
+                setLogId(null);
+                setRatings({});
               }}
               title="현재 위치 (드래그로 이동)"
               icon={{
