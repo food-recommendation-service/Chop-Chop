@@ -52,6 +52,7 @@ class SearchLog(Base):
     user_detail = Column(String)
     lat = Column(Float)
     lng = Column(Float)
+    region_name = Column(String, nullable=True)  # 역지오코딩된 지역명
     result_text = Column(String)
     stores = Column(String)       # JSON 문자열: [{name, lat, lng}]
 
@@ -73,7 +74,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -90,6 +91,7 @@ class RecommendRequest(BaseModel):
     user_detail: str = Field(default="", max_length=500)
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
+    region_name: Optional[str] = None
     filters: Optional[Dict[str, int]] = None
 
     @validator("filters")
@@ -190,6 +192,7 @@ def get_recommendations(req: RecommendRequest, username: str = Depends(get_curre
                 user_detail=req.user_detail,
                 lat=req.lat,
                 lng=req.lng,
+                region_name=req.region_name,
                 result_text=data["result"],
                 stores=json.dumps(data.get("stores", []), ensure_ascii=False),
             )
@@ -282,12 +285,32 @@ def get_my_logs(username: str = Depends(get_current_user), db: Session = Depends
             "user_detail": log.user_detail,
             "lat": log.lat,
             "lng": log.lng,
+            "region_name": log.region_name,
             "result_text": log.result_text,
             "stores": stores,
             "ratings": log_ratings,  # {restaurant_name: rating}
         })
 
     return result
+
+@app.delete("/my-logs/{log_id}")
+def delete_log(log_id: int, username: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    log = db.query(SearchLog).filter(
+        SearchLog.id == log_id,
+        SearchLog.user_id == db_user.id
+    ).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="검색 기록을 찾을 수 없습니다.")
+
+    # 연관된 별점도 함께 삭제
+    db.query(RestaurantRating).filter(RestaurantRating.search_log_id == log_id).delete()
+    db.delete(log)
+    db.commit()
+    return {"message": "삭제되었습니다."}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

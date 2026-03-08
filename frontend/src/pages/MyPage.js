@@ -92,8 +92,20 @@ const MyPage = () => {
   };
 
   const handleLogout = async () => {
+    if (!window.confirm("로그아웃 하시겠어요?")) return;
     await axios.post("http://localhost:8000/logout", {}, { withCredentials: true });
     navigate("/login");
+  };
+
+  const handleDeleteLog = async (logId) => {
+    if (!window.confirm("이 검색 기록을 삭제하시겠어요?\n연결된 별점도 함께 삭제됩니다.")) return;
+    try {
+      await axios.delete(`http://localhost:8000/my-logs/${logId}`, { withCredentials: true });
+      setLogs((prev) => prev.filter((log) => log.id !== logId));
+      if (expandedId === logId) setExpandedId(null);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   if (loading) {
@@ -143,7 +155,12 @@ const MyPage = () => {
                     onClick={() => setExpandedId(isExpanded ? null : log.id)}
                   >
                     <div className="mp-log-meta">
-                      <span className="mp-log-date">{formatDate(log.searched_at)}</span>
+                      <div className="mp-log-top-row">
+                        <span className="mp-log-date">{formatDate(log.searched_at)}</span>
+                        {log.region_name && (
+                          <span className="mp-log-region">📍 {log.region_name}</span>
+                        )}
+                      </div>
                       <div className="mp-log-tags">
                         {log.categories.map((c) => (
                           <span key={c} className="mp-tag">{c}</span>
@@ -159,6 +176,13 @@ const MyPage = () => {
                       {ratedCount > 0 && (
                         <span className="mp-log-info mp-rated">별점 {ratedCount}개</span>
                       )}
+                      <button
+                        className="mp-delete-btn"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteLog(log.id); }}
+                        title="기록 삭제"
+                      >
+                        🗑️
+                      </button>
                       <span className="mp-chevron">{isExpanded ? "▲" : "▼"}</span>
                     </div>
                   </div>

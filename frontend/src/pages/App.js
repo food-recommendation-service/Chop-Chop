@@ -139,6 +139,26 @@ const App = () => {
     setRatings({});
     setRatingMsg("");
 
+    // OpenStreetMap Nominatim으로 현재 위치 → 지역명 변환 (무료, API 키 불필요)
+    let regionName = null;
+    try {
+      const geoRes = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${myLocation.lat}&lon=${myLocation.lng}&format=json&accept-language=ko`,
+        { headers: { "Accept-Language": "ko" } }
+      );
+      const geoData = await geoRes.json();
+      const addr = geoData.address || {};
+      regionName =
+        (addr.borough || addr.city_district || "") +
+        (addr.suburb ? " " + addr.suburb : "") ||
+        addr.city ||
+        geoData.display_name?.split(",")[0] ||
+        null;
+      if (regionName) regionName = regionName.trim();
+    } catch (e) {
+      // 지오코딩 실패 시 무시
+    }
+
     try {
       const res = await axios.post(
         "http://localhost:8000/recommend",
@@ -148,6 +168,7 @@ const App = () => {
           user_detail: userText,
           lat: myLocation.lat,
           lng: myLocation.lng,
+          region_name: regionName,
           filters: activeFilters,
         },
         { withCredentials: true }

@@ -9,7 +9,10 @@
       "Read(//c/Users/jackj/.local/bin/**)",
       "Read(//c/Users/jackj/**)",
       "Bash(curl:*)",
-      "Bash(timeout 10 venv/Scripts/uvicorn.exe main:app:*)"
+      "Bash(timeout 10 venv/Scripts/uvicorn.exe main:app:*)",
+      "Bash(python3:*)",
+      "Bash(C:/Users/jackj/AppData/Local/Microsoft/WindowsApps/python.exe:*)",
+      "Bash(\"C:/Users/jackj/Desktop/맛집추천/backend/venv/Scripts/python.exe\":*)"
     ]
   }
 }
