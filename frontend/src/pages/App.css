@@ -286,3 +286,108 @@
 .location-button:active {
   transform: scale(0.95);
 }
+
+/* 헤더 상단 레이아웃 */
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.nav-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #38383a;
+  background-color: #2c2c2e;
+  color: #a0a0a5;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.nav-btn:hover {
+  border-color: #007aff;
+  color: #007aff;
+  background-color: rgba(0, 122, 255, 0.1);
+}
+
+.logout-btn:hover {
+  border-color: #ff3b30;
+  color: #ff3b30;
+  background-color: rgba(255, 59, 48, 0.1);
+}
+
+/* 별점 평가 섹션 */
+.rating-section {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid #38383a;
+}
+
+.rating-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #a0a0a5;
+  margin: 0 0 10px 0;
+}
+
+.rating-msg {
+  font-size: 12px;
+  color: #34c759;
+  margin: 0 0 8px 0;
+}
+
+.rating-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid #2c2c2e;
+}
+
+.rating-row:last-child {
+  border-bottom: none;
+}
+
+.rating-name {
+  font-size: 13px;
+  color: #e1e1e1;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 8px;
+}
+
+.star-rating {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.star {
+  font-size: 20px;
+  color: #3a3a3c;
+  cursor: pointer;
+  transition: color 0.1s, transform 0.1s;
+  line-height: 1;
+}
+
+.star.filled {
+  color: #ffd60a;
+}
+
+.star:hover {
+  transform: scale(1.2);
+}

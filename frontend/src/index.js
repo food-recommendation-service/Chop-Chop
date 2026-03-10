@@ -6,6 +6,7 @@ import "./index.css";
 import AppComponent from "./pages/App";
 import LoginComponent from "./pages/Login";
 import RegisterComponent from "./pages/Register";
+import MyPageComponent from "./pages/MyPage";
 import PrivateRouteComponent from "./components/PrivateRoute";
 
 const root = ReactDOM.createRoot(document.getElementById("root"));
@@ -20,6 +21,14 @@ root.render(
         element={
           <PrivateRouteComponent>
             <AppComponent />
+          </PrivateRouteComponent>
+        }
+      />
+      <Route
+        path="/mypage"
+        element={
+          <PrivateRouteComponent>
+            <MyPageComponent />
           </PrivateRouteComponent>
         }
       />
