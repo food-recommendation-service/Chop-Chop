@@ -1,0 +1,394 @@
+.mp-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background-color: #1a1a1c;
+}
+
+.mp-spinner {
+  width: 48px;
+  height: 48px;
+  border: 5px solid #333;
+  border-top: 5px solid #007aff;
+  border-radius: 50%;
+  animation: mp-spin 1s linear infinite;
+}
+
+@keyframes mp-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.mp-container {
+  min-height: 100vh;
+  background-color: #1a1a1c;
+  color: #fff;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.mp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  background-color: #1c1c1e;
+  border-bottom: 1px solid #38383a;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.mp-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #007aff;
+  margin: 0 0 4px 0;
+}
+
+.mp-username {
+  font-size: 14px;
+  color: #8d8d92;
+  margin: 0;
+}
+
+.mp-header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.mp-nav-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #38383a;
+  background-color: #2c2c2e;
+  color: #a0a0a5;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.mp-nav-btn:hover {
+  border-color: #007aff;
+  color: #007aff;
+  background-color: rgba(0, 122, 255, 0.1);
+}
+
+.mp-logout-btn:hover {
+  border-color: #ff3b30;
+  color: #ff3b30;
+  background-color: rgba(255, 59, 48, 0.1);
+}
+
+.mp-content {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 32px 24px;
+}
+
+.mp-section-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.mp-section-title h2 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  color: #fff;
+}
+
+.mp-count {
+  font-size: 13px;
+  color: #8d8d92;
+  background-color: #2c2c2e;
+  padding: 2px 10px;
+  border-radius: 20px;
+  border: 1px solid #38383a;
+}
+
+.mp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #636366;
+  text-align: center;
+}
+
+.mp-empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+}
+
+.mp-empty p {
+  font-size: 16px;
+  margin: 0 0 20px 0;
+}
+
+.mp-go-btn {
+  padding: 12px 24px;
+  background-color: #007aff;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.mp-go-btn:hover {
+  background-color: #0056b3;
+}
+
+.mp-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mp-log-card {
+  background-color: #1c1c1e;
+  border: 1px solid #38383a;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.mp-log-card:hover {
+  border-color: #48484a;
+}
+
+.mp-log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  gap: 12px;
+}
+
+.mp-log-header:hover {
+  background-color: #242426;
+}
+
+.mp-log-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.mp-log-top-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.mp-log-date {
+  font-size: 12px;
+  color: #636366;
+}
+
+.mp-log-region {
+  font-size: 12px;
+  color: #aeaeb2;
+}
+
+.mp-log-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mp-tag {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background-color: rgba(0, 122, 255, 0.15);
+  color: #007aff;
+  border: 1px solid rgba(0, 122, 255, 0.3);
+}
+
+.mp-tag-detail {
+  background-color: rgba(52, 199, 89, 0.1);
+  color: #34c759;
+  border-color: rgba(52, 199, 89, 0.3);
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-log-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.mp-log-info {
+  font-size: 12px;
+  color: #636366;
+  white-space: nowrap;
+}
+
+.mp-rated {
+  color: #ffd60a;
+}
+
+.mp-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  line-height: 1;
+}
+
+.mp-delete-btn:hover {
+  opacity: 1;
+}
+
+.mp-chevron {
+  font-size: 11px;
+  color: #48484a;
+  margin-left: 4px;
+}
+
+.mp-log-body {
+  padding: 0 20px 20px 20px;
+  border-top: 1px solid #38383a;
+  background-color: #1c1c1e;
+}
+
+.mp-no-stores {
+  color: #636366;
+  font-size: 14px;
+  padding-top: 16px;
+  margin: 0;
+}
+
+.mp-stores-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #8d8d92;
+  margin: 16px 0 8px 0;
+}
+
+.mp-rating-saved {
+  font-size: 12px;
+  color: #34c759;
+  margin: 0 0 8px 0;
+}
+
+.mp-stores-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mp-store-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #2c2c2e;
+}
+
+.mp-store-row:last-child {
+  border-bottom: none;
+}
+
+.mp-store-num {
+  font-size: 12px;
+  color: #636366;
+  width: 20px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.mp-store-name {
+  flex: 1;
+  font-size: 14px;
+  color: #e1e1e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mp-stars {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.mp-star {
+  font-size: 20px;
+  color: #3a3a3c;
+  transition: color 0.1s;
+  line-height: 1;
+}
+
+.mp-star.filled {
+  color: #ffd60a;
+}
+
+.mp-star.clickable {
+  cursor: pointer;
+  transition: color 0.1s, transform 0.1s;
+}
+
+.mp-star.clickable:hover {
+  transform: scale(1.2);
+}
+
+.mp-star-label {
+  font-size: 12px;
+  color: #ffd60a;
+  flex-shrink: 0;
+  min-width: 28px;
+}
+
+.mp-result-detail {
+  margin-top: 16px;
+  border: 1px solid #38383a;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mp-result-detail summary {
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #8d8d92;
+  cursor: pointer;
+  background-color: #2c2c2e;
+  list-style: none;
+  user-select: none;
+}
+
+.mp-result-detail summary:hover {
+  color: #fff;
+}
+
+.mp-result-detail[open] summary {
+  border-bottom: 1px solid #38383a;
+}
+
+.mp-result-text {
+  padding: 14px;
+  font-size: 13px;
+  color: #c7c7cc;
+  white-space: pre-wrap;
+  line-height: 1.7;
+  font-family: 'Menlo', 'Monaco', monospace;
+  margin: 0;
+  background-color: #1c1c1e;
+}
