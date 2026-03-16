@@ -8,6 +8,7 @@ import re
 import time
 import os
 from dotenv import load_dotenv
+import llm_reranker
 
 load_dotenv()
 
@@ -111,7 +112,7 @@ def hard_filter_by_similarity(place_docs, user_query, threshold=0.3):
 # [4] 메인 파이프라인
 # ==================================================================================
 
-def search_and_analyze(categories, user_detail, lat, lng, radius_km):
+def search_and_analyze(categories, user_detail, lat, lng, radius_km, hard_filters=None):
     # 1. 검색어 준비 (200개 수집을 위한 키워드 분할)
     search_keywords = [f"{cat} 맛집" for cat in categories]
     if user_detail: search_keywords.append(f"{user_detail} 맛집")
@@ -165,18 +166,20 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km):
         p['total_score'] = (p['sim_score'] * 0.3) + (p['rating']/5 * 0.35) + (pop_score * 0.25) + (rec_score * 0.1)
         p['match_rate'] = int(p['total_score'] * 100)
 
-    # 6. 상위 3개 선정 및 리포트
-    top_3 = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:3]
-    
-    report = f"\n{'='*60}\n🏆 추천 리포트 ({len(candidates)}개 후보 중 Top 3)\n{'='*60}\n"
-    stores_data = []
-    
-    for rank, p in enumerate(top_3, 1):
-        feats = get_naver_style_features(p['name'], p['reviews'])
-        report += f"🏅 {rank}위: {p['name']} (매칭 {p['match_rate']}%)\n"
-        report += f"   ✨ {feats.get('purpose', '맛집')} | {feats.get('atmosphere', '분위기 좋음')}\n"
-        report += f"   🔑 {', '.join(feats.get('keywords', []))}\n"
-        report += "-"*60 + "\n"
-        stores_data.append({"name": p['name'], "lat": p['lat'], "lng": p['lng'], "rating": p['rating'], "address": p['address']})
+    # 6. 상위 15개 선정 후 LLM 리랭킹으로 최종 Top 3 결정
+    top_15 = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:15]
+    print(f"📋 Top {len(top_15)}개 후보를 LLM 리랭킹에 전달...")
 
-    return {"result": report, "stores": stores_data, "scanned_count": len(filtered_places), "analyzed_count": len(candidates)}
+    llm_result = llm_reranker.rerank_with_llm(
+        top_candidates=top_15,
+        radius_km=radius_km,
+        hard_filters=hard_filters or [],
+        user_detail=user_detail
+    )
+
+    return {
+        "result": llm_result["result"],
+        "stores": llm_result["stores"],
+        "scanned_count": len(filtered_places),
+        "analyzed_count": len(candidates)
+    }

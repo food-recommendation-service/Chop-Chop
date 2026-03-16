@@ -54,11 +54,11 @@ class UserCreate(BaseModel):
     username: str
     password: str
 
-# [수정됨] 사용자 텍스트 입력(user_detail) 추가
 class RecommendRequest(BaseModel):
     radius_km: float
-    categories: List[str]
-    user_detail: str  # 예: "조용하고 바다가 보이는"
+    categories: List[str]       # 음식 카테고리 (예: ["한식", "해산물"])
+    hard_filters: List[str]     # 버튼 필터 (예: ["주차가능", "예스키즈존"])
+    user_detail: str            # 자유 텍스트 or 분위기 버튼 (예: "조용하고 바다가 보이는")
     lat: float
     lng: float
 
@@ -98,7 +98,8 @@ def get_recommendations(req: RecommendRequest):
             user_detail=req.user_detail,
             lat=req.lat,
             lng=req.lng,
-            radius_km=req.radius_km
+            radius_km=req.radius_km,
+            hard_filters=req.hard_filters
         )
         return {"result": data["result"], "stores": data["stores"]}
     except Exception as e:
