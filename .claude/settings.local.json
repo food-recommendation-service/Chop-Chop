@@ -12,7 +12,12 @@
       "Bash(timeout 10 venv/Scripts/uvicorn.exe main:app:*)",
       "Bash(python3:*)",
       "Bash(C:/Users/jackj/AppData/Local/Microsoft/WindowsApps/python.exe:*)",
-      "Bash(\"C:/Users/jackj/Desktop/맛집추천/backend/venv/Scripts/python.exe\":*)"
+      "Bash(\"C:/Users/jackj/Desktop/맛집추천/backend/venv/Scripts/python.exe\":*)",
+      "Bash(grep -rn \"^<<<<<<< \\\\|^=======$\\\\|^>>>>>>> \" \"C:/Users/jackj/Desktop/프로젝트/Chop-Chop/backend\" --include=\"*.py\")",
+      "Bash(grep -Prn \"^<{7} |^={7}$|^>{7} \" \"C:/Users/jackj/Desktop/프로젝트/Chop-Chop/backend/recommender.py\" \"C:/Users/jackj/Desktop/프로젝트/Chop-Chop/backend/main.py\" \"C:/Users/jackj/Desktop/프로젝트/Chop-Chop/backend/mapping_utils.py\")",
+      "Bash(cd \"C:/Users/jackj/Desktop/프로젝트/Chop-Chop\" && grep -Pn \"^<{7} |^={7}$|^>{7} \" backend/requirements.txt frontend/src/components/PrivateRoute.js frontend/src/pages/App.css frontend/src/pages/App.js frontend/src/pages/Login.js)",
+      "Bash(wait bo8ihab2m:*)",
+      "Bash(find:*)"
     ]
   }
 }
