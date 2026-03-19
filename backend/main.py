@@ -16,6 +16,7 @@ from jose import jwt, JWTError
 from dotenv import load_dotenv
 
 import recommender
+from predictor import RatingPredictor, PredictorConfig
 
 load_dotenv()
 
@@ -67,6 +68,8 @@ class RestaurantRating(Base):
 
 Base.metadata.create_all(bind=engine)
 
+_predictor = RatingPredictor(os.path.join(os.path.dirname(__file__), "item_encoder.pt"))
+
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 app = FastAPI()
 
@@ -103,6 +106,9 @@ class RecommendRequest(BaseModel):
             if val not in (0, 1):
                 raise ValueError(f"필터 값은 0 또는 1이어야 합니다: {key}={val}")
         return v
+
+class SuggestRequest(BaseModel):
+    stores: List[Dict]
 
 class RateRequest(BaseModel):
     search_log_id: int
@@ -215,6 +221,68 @@ def get_recommendations(req: RecommendRequest, username: str = Depends(get_curre
     except Exception as e:
         logger.exception(f"추천 처리 중 오류: {e}")
         raise HTTPException(status_code=500, detail="추천 처리 중 오류가 발생했습니다.")
+
+@app.post("/suggest")
+def get_suggestions(req: SuggestRequest, username: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    # 사용자의 별점 이력 조회
+    ratings = db.query(RestaurantRating).filter(
+        RestaurantRating.user_id == db_user.id
+    ).order_by(RestaurantRating.rated_at.asc()).all()
+
+    # 관련 검색 로그 한 번에 조회
+    log_ids = list(set(r.search_log_id for r in ratings))
+    logs = {l.id: l for l in db.query(SearchLog).filter(SearchLog.id.in_(log_ids)).all()}
+
+    # predictor용 history 구성
+    history = []
+    for r in ratings:
+        log = logs.get(r.search_log_id)
+        if not log or not log.stores:
+            continue
+        store = next((s for s in json.loads(log.stores) if s.get("name") == r.restaurant_name), None)
+        if not store:
+            continue
+        history.append({
+            "place": {
+                "latitude": store.get("lat"),
+                "longitude": store.get("lng"),
+                "stars": store.get("rating", 0),
+                "review_count": store.get("count", 0),
+                "is_open": 1,
+                "categories": ", ".join(store.get("categories", [])),
+                "attributes": store.get("yelp_attrs", {}),
+            },
+            "rating": float(r.rating),
+            "date": r.rated_at.isoformat() if r.rated_at else None,
+        })
+
+    # 각 식당에 대해 예측 별점 계산
+    cfg = PredictorConfig()
+    suggestions = []
+    for store in req.stores:
+        place = {
+            "latitude": store.get("lat"),
+            "longitude": store.get("lng"),
+            "stars": store.get("rating", 0),
+            "review_count": store.get("count", 0),
+            "is_open": 1,
+            "categories": ", ".join(store.get("categories", [])),
+            "attributes": store.get("yelp_attrs", {}),
+        }
+        result = _predictor.predict_rating(history, place, cfg)
+        suggestions.append({
+            "name": store.get("name"),
+            "pred_rating": round(result["pred_rating"], 2),
+            "fallback": result["fallback"],
+        })
+
+    suggestions.sort(key=lambda x: x["pred_rating"], reverse=True)
+    return {"suggestions": suggestions, "n_history": len(history)}
+
 
 @app.post("/rate")
 def rate_restaurant(req: RateRequest, username: str = Depends(get_current_user), db: Session = Depends(get_db)):

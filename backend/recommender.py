@@ -74,7 +74,7 @@ def get_bulk_places(search_query, center_lat, center_lng, radius_km):
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_API_KEY,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.reviews,places.location,places.formattedAddress,places.editorialSummary,places.priceLevel,places.servesBeer,places.servesWine,places.parkingOptions,places.goodForGroups,places.menuForChildren,places.accessibilityOptions,places.outdoorSeating,places.dineIn,places.servesCocktails,places.servesVegetarianFood,nextPageToken'
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.reviews,places.location,places.formattedAddress,places.editorialSummary,places.priceLevel,places.servesBeer,places.servesWine,places.parkingOptions,places.goodForGroups,places.menuForChildren,places.accessibilityOptions,places.outdoorSeating,places.dineIn,places.servesCocktails,places.servesVegetarianFood,places.types,nextPageToken'
     }
     places_list = []
     next_token = None
@@ -187,7 +187,8 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
             "lng": place_lng,
             "address": p.get('formattedAddress', ''),
             "summary": p.get('editorialSummary', {}).get('text', ''),
-            "yelp_attrs": yelp_style_attr
+            "yelp_attrs": yelp_style_attr,
+            "types": p.get('types', []),
         })
 
     logger.info(f"반경 초과 제외: {radius_dropped_count}개, 하드필터 제외: {hard_dropped_count}개")

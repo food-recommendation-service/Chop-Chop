@@ -88,6 +88,7 @@ const App = () => {
   const [ratingMsg, setRatingMsg] = useState("");
 
   const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
 
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
@@ -138,6 +139,7 @@ const App = () => {
     setLogId(null);
     setRatings({});
     setRatingMsg("");
+    setSuggestions([]);
 
     // OpenStreetMap Nominatim으로 현재 위치 → 지역명 변환
     let regionName = null;
@@ -173,11 +175,25 @@ const App = () => {
         },
         { withCredentials: true }
       );
+      const fetchedStores = res.data.stores || [];
       setResult(res.data.result);
-      setStores(res.data.stores || []);
+      setStores(fetchedStores);
       setScannedCount(res.data.scanned_count || 0);
       setAnalyzedCount(res.data.analyzed_count || 0);
       setLogId(res.data.log_id || null);
+
+      if (fetchedStores.length > 0) {
+        try {
+          const suggestRes = await axios.post(
+            "http://localhost:8000/suggest",
+            { stores: fetchedStores },
+            { withCredentials: true }
+          );
+          setSuggestions(suggestRes.data.suggestions || []);
+        } catch (e) {
+          console.error("추천 예측 오류:", e);
+        }
+      }
     } catch (e) {
       console.error(e);
       alert("추천 중 오류가 발생했습니다.");
@@ -348,21 +364,31 @@ const App = () => {
               </div>
               <pre className="results-content">{result}</pre>
 
+
               {stores.length > 0 && logId && (
                 <div className="rating-section">
                   <p className="rating-title">추천 식당 별점 평가</p>
                   {ratingMsg && <p className="rating-msg">{ratingMsg}</p>}
-                  {stores.map((s, idx) => (
-                    <div key={idx} className="rating-row">
-                      <span className="rating-name">
-                        {idx + 1}. {s.name}
-                      </span>
-                      <StarRating
-                        value={ratings[s.name] || 0}
-                        onChange={(star) => handleRate(s.name, star)}
-                      />
-                    </div>
-                  ))}
+                  {stores.map((s, idx) => {
+                    const pred = suggestions.find(sg => sg.name === s.name);
+                    return (
+                      <div key={idx} className="rating-row">
+                        <div className="rating-name-block">
+                          <span className="rating-name">{idx + 1}. {s.name}</span>
+                          {pred && (
+                            <span className="suggestion-score">
+                              내 예상 별점 ★ {pred.pred_rating}
+                              {pred.fallback && <span className="fallback-badge"> (기본)</span>}
+                            </span>
+                          )}
+                        </div>
+                        <StarRating
+                          value={ratings[s.name] || 0}
+                          onChange={(star) => handleRate(s.name, star)}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </>

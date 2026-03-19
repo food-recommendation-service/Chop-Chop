@@ -152,7 +152,10 @@ def rerank_with_llm(
                 "lng": candidate["lng"],
                 "rating": candidate["rating"],
                 "address": candidate["address"],
-                "reason": item["reason"]
+                "reason": item["reason"],
+                "count": candidate.get("count", 0),
+                "categories": candidate.get("types", []),
+                "yelp_attrs": candidate.get("yelp_attrs", {}),
             })
 
         # 텍스트 리포트 생성
@@ -180,7 +183,10 @@ def rerank_with_llm(
                 "lng": p["lng"],
                 "rating": p["rating"],
                 "address": p["address"],
-                "reason": f"스코어 기준 {rank}위 식당입니다. (LLM 분석 오류로 자동 선정)"
+                "reason": f"스코어 기준 {rank}위 식당입니다. (LLM 분석 오류로 자동 선정)",
+                "count": p.get("count", 0),
+                "categories": p.get("types", []),
+                "yelp_attrs": p.get("yelp_attrs", {}),
             })
 
         report = f"\n⚠️ LLM 오류 발생 - 스코어 기준 Top 3\n"
