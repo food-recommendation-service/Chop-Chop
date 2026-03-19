@@ -42,7 +42,10 @@ Chop-Chop은 사용자의 **현재 위치**와 **구체적인 상황(Context)**�
     <td align="left">
       • <b>RAG 파이프라인 아키텍처</b> 설계<br>
       • React/FastAPI <b>풀스택 개발</b><br>
-      • Google Places API 비용 최적화<br>
+      • Google Places API FieldMask 최적화<br>
+      • JWT 기반 로그인/회원가입 구현<br>
+      • 검색 로그 및 별점 DB 설계/구현<br>
+      • <b>개인화 별점 예측 시스템</b> 백엔드 연동<br>
       • Git Flow 및 일정 총괄 관리
     </td>
     <td align="left">
@@ -98,6 +101,13 @@ Chop-Chop은 사용자의 **현재 위치**와 **구체적인 상황(Context)**�
 * **리뷰 키워드 추출 (Review Summarization)**
     * **KeyBERT**를 활용해 수백 개의 리뷰에서 핵심 키워드(청결, 맛, 친절, 소음 등)를 추출하고 요약합니다.
 
+* **개인화 별점 예측 (Personalized Rating Prediction)**
+    * 사용자가 과거에 평가한 식당 이력을 기반으로, 새로운 식당에 대한 **예상 별점을 실시간으로 예측**합니다.
+    * Yelp 데이터셋으로 사전 학습된 **ItemEncoder 모델** (`item_encoder.pt`)을 활용하여 식당을 256차원 벡터로 인코딩합니다.
+    * 사용자별 평가 이력이 10개 이상 쌓이면 **Ridge 회귀 기반 개인화 예측**으로 전환되어 점점 정확해집니다.
+    * 이력이 부족한 신규 사용자도 글로벌 평균 + 식당 자체 특성 기반 **콜드스타트 fallback**으로 즉시 예측값을 제공합니다.
+    * 추천 결과 각 식당 옆에 **"내 예상 별점"** 으로 표시됩니다.
+
 <br>
 
 ## 3. 시스템 아키텍처 (System Architecture)
@@ -109,19 +119,25 @@ graph TD
     User([User Input]) -->|Location + Query| API[Google Maps API]
     API -->|Real-time Data| PreProcess[Data Preprocessing]
     PreProcess --> HardFilter{Hard Filtering}
-    
+
     subgraph Filtering Pipeline
     HardFilter -->|Metadata Check| CandidateList[Candidate List]
     CandidateList -->|Review Embedding| SoftFilter{Soft Filtering}
     SoftFilter -->|Vector Similarity| TopK[Top-K Candidates]
     end
-    
-    TopK -->|Context Injection| LLM[LLM Inference]
-    LLM -->|Reasoning & Summary| Output([Final Recommendation])
+
+    TopK -->|Context Injection| LLM[LLM Reranking - Gemini]
+    LLM -->|Top 3 + Reason| Output([Final Recommendation])
+    Output -->|Save to DB| DB[(SQLite DB)]
+
+    DB -->|Rating History| Predictor[ItemEncoder + Ridge Regression]
+    Output -->|Candidate Stores| Predictor
+    Predictor -->|Predicted Rating per Store| Output
 
     style HardFilter fill:#f9f,stroke:#333,stroke-width:2px
     style SoftFilter fill:#bbf,stroke:#333,stroke-width:2px
     style LLM fill:#dfd,stroke:#333,stroke-width:2px
+    style Predictor fill:#ffd,stroke:#333,stroke-width:2px
 ```
 ## 4. 개발 일정 (WBS)
 
@@ -169,12 +185,12 @@ gantt
 
 | Category | Technologies |
 | :--- | :--- |
-| **AI Model** | Llama-3 (8B), Gemini 1.5 Flash, KeyBERT, SentenceTransformers |
-| **Optimization** | AWQ / QLoRA Quantization (4-bit 경량화), Fine-tuning |
+| **AI / ML** | Gemini 2.0 Flash (LLM Reranking), SentenceTransformers (Embedding), PyTorch (ItemEncoder) |
+| **추천 모델** | Yelp 사전학습 ItemEncoder + Online Ridge Regression (개인화 별점 예측) |
 | **Data Source** | Google Places API (New), Yelp Open Dataset |
-| **Backend** | Python, FastAPI, REST API |
-| **Frontend** | React.js, Node.js, Tailwind CSS |
-| **Collaboration** | Git, Discord, Notion |
+| **Backend** | Python, FastAPI, SQLAlchemy, SQLite, JWT |
+| **Frontend** | React.js, Google Maps JS API, Axios |
+| **Collaboration** | Git, GitHub, Discord, Notion |
 
 <br>
 
@@ -195,6 +211,16 @@ gantt
 - **해결:** Yelp 데이터셋으로 학습된 속성 기준을 적용하여, 리뷰 텍스트를 벡터화(Embedding)하고 사용자 쿼리와의 **Cosine Similarity**를 계산하는 Soft Filtering 도입.
 - **성과:** 키워드가 정확히 일치하지 않아도 문맥상 유사한 식당을 추천하는 **Semantic Search** 구현.
 
+### 6.4 콜드스타트 문제 해결 (Cold Start Problem)
+- **문제 상황:** 신규 사용자는 별점 이력이 없어 개인화 추천이 불가능함.
+- **해결:** Yelp 전체 데이터 기반 글로벌 평균(`mu`)과 식당 자체의 item bias(`b_i`)를 합산하는 fallback 전략 적용. 별점 이력 10개 미만이면 자동으로 fallback 모드로 동작.
+- **성과:** 이력이 전혀 없는 신규 사용자도 즉시 예측값 제공. 이력이 쌓일수록 Ridge 회귀 기반 개인화 예측으로 자연스럽게 전환.
+
+### 6.5 사전학습 모델과 실시간 개인화의 결합
+- **문제 상황:** 모델을 사용자별로 재학습하면 비용과 시간이 과다하게 소요됨.
+- **해결:** Yelp 데이터로 사전학습된 `ItemEncoder` 모델의 가중치는 고정한 채, 사용자 이력만으로 **Ridge 회귀를 실시간 피팅**하여 개인 취향 벡터(`p_u`)를 계산.
+- **성과:** 모델 재학습 없이 요청마다 개인화된 예측값 제공. 최근 별점에 가중치를 더 부여하는 **시간 감쇠(time decay)** 적용으로 취향 변화에도 대응.
+
 <br>
 
 ## 7. 화면 설계 (UI Design)
@@ -212,19 +238,24 @@ gantt
 ```bash
 Chop-Chop/
 ├── backend/
-│   ├── models/          # Quantized LLM & Embeddings
-│   ├── api/             # API Endpoints (FastAPI)
-│   ├── services/        # Recommendation Logic (Hybrid Filtering)
-│   ├── utils/           # Google Maps API Handlers
-│   ├── recommender.py   # Main RAG Pipeline
+│   ├── main.py              # FastAPI 앱, 전체 엔드포인트 (로그인/추천/별점/개인화 예측)
+│   ├── recommender.py       # Google Places 수집 → Hard/Soft 필터링 → 스코어링
+│   ├── llm_reranker.py      # Gemini 기반 Top 15 → Top 3 리랭킹
+│   ├── predictor.py         # ItemEncoder 기반 개인화 별점 예측 (유혜린 제공)
+│   ├── mapping_utils.py     # Google Places 속성 → Yelp 스타일 변환
+│   ├── item_encoder.pt      # 사전학습된 식당 인코더 모델 (유혜린 제공, Git LFS)
+│   ├── users.db             # SQLite DB (users, search_logs, restaurant_ratings)
 │   └── requirements.txt
 ├── frontend/
 │   ├── public/
 │   ├── src/
-│   │   ├── components/  # Map, Card UI Components
-│   │   └── pages/       # Login, Main, Result Pages
+│   │   ├── pages/
+│   │   │   ├── App.js       # 메인 지도/추천/별점/예상별점 화면
+│   │   │   ├── MyPage.js    # 검색 이력 및 별점 이력 조회
+│   │   │   ├── Login.js     # 로그인
+│   │   │   └── Register.js  # 회원가입
+│   │   └── components/
 │   └── package.json
-├── data/                # Pre-processed Datasets (Yelp/Google)
 └── README.md
 ```
 ## 9. 회고 (Retrospective)

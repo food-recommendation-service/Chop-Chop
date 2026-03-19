@@ -23,7 +23,8 @@
       "Bash(pip3 install:*)",
       "Bash(py -m pip install git-filter-repo)",
       "Bash(py -c \"import torch; data = torch.load\\(''item_encoder.pt'', map_location=''cpu'', weights_only=False\\); print\\(type\\(data\\)\\); print\\(list\\(data.keys\\(\\)\\) if isinstance\\(data, dict\\) else dir\\(data\\)\\)\")",
-      "Bash(py -c \":*)"
+      "Bash(py -c \":*)",
+      "Bash(git lfs:*)"
     ]
   }
 }
