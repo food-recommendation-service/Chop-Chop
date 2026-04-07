@@ -11,8 +11,8 @@
 ### 1.1 서비스 소개
 **"지도 앱의 별점만으로는 알 수 없는 '진짜' 맛집을 찾아줍니다."**
 
-Chop-Chop은 사용자의 **현재 위치**와 **구체적인 상황(Context)**을 기반으로, 가장 적합한 식당을 실시간으로 분석하고 추천해주는 AI 서비스입니다.
-기존의 정적인 데이터베이스 조회 방식에서 벗어나, **Google Maps API**의 실시간 데이터와 **LLM(Llama-3, Gemini)**의 추론 능력을 결합한 **RAG(Retrieval-Augmented Generation)** 파이프라인을 통해 "지금, 여기"에 딱 맞는 맛집을 제안합니다.
+Chop-Chop은 사용자의 현재 위치와 구체적인 상황(Context)을 기반으로, 가장 적합한 식당을 실시간으로 분석하고 추천해주는 AI 서비스입니다.
+기존의 정적인 데이터베이스 조회 방식에서 벗어나, **Google Maps API**의 실시간 데이터와 LLM(Llama-3, Gemini)의 추론 능력을 결합한 **RAG(Retrieval-Augmented Generation)** 파이프라인을 통해 "지금, 여기"에 딱 맞는 맛집을 제안합니다.
 
 ### 1.2 프로젝트 목표 (Technical Goals)
 * **실시간 RAG 파이프라인 구축**: 미리 데이터를 적재(Accumulate)하지 않고, 사용자 요청 시점에 Google Maps API를 호출하여 폐업/휴무 이슈가 없는 **100% 실시간 데이터**를 제공합니다.
