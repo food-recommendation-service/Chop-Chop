@@ -6,6 +6,14 @@
 
 <br>
 
+<div align="center">
+
+## 🎬 Demo
+
+https://github.com/user-attachments/assets/d9a4e330-a8e0-4d86-ab92-11e5526393c3
+
+</div>
+
 ## 1. 프로젝트 개요
 
 ### 1.1 서비스 소개
