@@ -57,10 +57,10 @@ Chop-Chop은 사용자의 현재 위치와 구체적인 상황(Context)을 기�
       • Git Flow 및 일정 총괄 관리
     </td>
     <td align="left">
+      • 식당 데이터 생성 및 전처리 파이프라인 구축 <br>
+      • Llama-3 <b>모델 QLoRA 파인 튜닝 </b><br>
       • Llama-3 <b>모델 경량화(Quantization)</b><br>
       • <b>KeyBERT</b> 리뷰 키워드 추출 구현<br>
-      • 하이브리드 필터링 알고리즘 개발<br>
-      • 임베딩 벡터 검색 최적화
     </td>
     <td align="left">
       • <b>Yelp 데이터셋 분석</b> 및 속성 정의<br>
