@@ -8,9 +8,11 @@
 
 <div align="center">
 
-## 🎬 Demo
+## 🎬 Demo (클릭 시 YouTube 이동)
 
-https://github.com/user-attachments/assets/d9a4e330-a8e0-4d86-ab92-11e5526393c3
+[![Chop-Chop 시연 영상](https://img.youtube.com/vi/xnaribUTMJU/0.jpg)](https://www.youtube.com/watch?v=xnaribUTMJU)
+
+
 
 </div>
 
