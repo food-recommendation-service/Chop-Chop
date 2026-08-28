@@ -1,4 +1,5 @@
 import os
+import json
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -7,7 +8,7 @@ import uvicorn
 from fastapi import FastAPI, Depends, HTTPException, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from passlib.context import CryptContext
@@ -15,6 +16,7 @@ from jose import jwt, JWTError
 from dotenv import load_dotenv
 
 import recommender
+from predictor import RatingPredictor, PredictorConfig
 
 load_dotenv()
 
@@ -41,7 +43,32 @@ class User(Base):
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
 
+class SearchLog(Base):
+    __tablename__ = "search_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    searched_at = Column(DateTime, default=datetime.utcnow)
+    radius_km = Column(Float)
+    categories = Column(String)   # JSON 문자열
+    user_detail = Column(String)
+    lat = Column(Float)
+    lng = Column(Float)
+    region_name = Column(String, nullable=True)  # 역지오코딩된 지역명
+    result_text = Column(String)
+    stores = Column(String)       # JSON 문자열: [{name, lat, lng}]
+
+class RestaurantRating(Base):
+    __tablename__ = "restaurant_ratings"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    search_log_id = Column(Integer, ForeignKey("search_logs.id"), index=True)
+    restaurant_name = Column(String)
+    rating = Column(Integer)      # 1~5
+    rated_at = Column(DateTime, default=datetime.utcnow)
+
 Base.metadata.create_all(bind=engine)
+
+_predictor = RatingPredictor(os.path.join(os.path.dirname(__file__), "item_encoder.pt"))
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 app = FastAPI()
@@ -50,7 +77,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000"],
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -64,10 +91,12 @@ class UserCreate(BaseModel):
 class RecommendRequest(BaseModel):
     radius_km: float = Field(gt=0, le=50)
     categories: List[str] = Field(default=[])
+    hard_filters: List[str] = Field(default=[])  # LLM 프롬프트용 (예: ["주차가능", "예스키즈존"])
     user_detail: str = Field(default="", max_length=500)
     lat: float = Field(ge=-90, le=90)
     lng: float = Field(ge=-180, le=180)
-    filters: Optional[Dict[str, int]] = None
+    region_name: Optional[str] = None
+    filters: Optional[Dict[str, int]] = None     # 하드 필터링용 (예: {"parking": 1})
 
     @validator("filters")
     def validate_filters(cls, v):
@@ -77,6 +106,14 @@ class RecommendRequest(BaseModel):
             if val not in (0, 1):
                 raise ValueError(f"필터 값은 0 또는 1이어야 합니다: {key}={val}")
         return v
+
+class SuggestRequest(BaseModel):
+    stores: List[Dict]
+
+class RateRequest(BaseModel):
+    search_log_id: int
+    restaurant_name: str
+    rating: int = Field(ge=1, le=5)
 
 def get_db():
     db = SessionLocal()
@@ -139,7 +176,7 @@ def logout(response: Response):
     return {"message": "로그아웃 성공"}
 
 @app.post("/recommend")
-def get_recommendations(req: RecommendRequest, username: str = Depends(get_current_user)):
+def get_recommendations(req: RecommendRequest, username: str = Depends(get_current_user), db: Session = Depends(get_db)):
     logger.info(f"추천 요청 - 사용자: {username}, 반경: {req.radius_km}km, 카테고리: {req.categories}")
     try:
         data = recommender.search_and_analyze(
@@ -148,17 +185,202 @@ def get_recommendations(req: RecommendRequest, username: str = Depends(get_curre
             lat=req.lat,
             lng=req.lng,
             radius_km=req.radius_km,
-            filters=req.filters
+            filters=req.filters,
+            hard_filters=req.hard_filters
         )
+
+        # 검색 로그 저장
+        db_user = db.query(User).filter(User.username == username).first()
+        if db_user:
+            log = SearchLog(
+                user_id=db_user.id,
+                searched_at=datetime.utcnow(),
+                radius_km=req.radius_km,
+                categories=json.dumps(req.categories, ensure_ascii=False),
+                user_detail=req.user_detail,
+                lat=req.lat,
+                lng=req.lng,
+                region_name=req.region_name,
+                result_text=data["result"],
+                stores=json.dumps(data.get("stores", []), ensure_ascii=False),
+            )
+            db.add(log)
+            db.commit()
+            db.refresh(log)
+            log_id = log.id
+        else:
+            log_id = None
+
         return {
             "result": data["result"],
             "stores": data["stores"],
             "scanned_count": data.get("scanned_count", 0),
-            "analyzed_count": data.get("analyzed_count", 0)
+            "analyzed_count": data.get("analyzed_count", 0),
+            "log_id": log_id,
         }
     except Exception as e:
         logger.exception(f"추천 처리 중 오류: {e}")
         raise HTTPException(status_code=500, detail="추천 처리 중 오류가 발생했습니다.")
+
+@app.post("/suggest")
+def get_suggestions(req: SuggestRequest, username: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    # 사용자의 별점 이력 조회
+    ratings = db.query(RestaurantRating).filter(
+        RestaurantRating.user_id == db_user.id
+    ).order_by(RestaurantRating.rated_at.asc()).all()
+
+    # 관련 검색 로그 한 번에 조회
+    log_ids = list(set(r.search_log_id for r in ratings))
+    logs = {l.id: l for l in db.query(SearchLog).filter(SearchLog.id.in_(log_ids)).all()}
+
+    # predictor용 history 구성
+    history = []
+    for r in ratings:
+        log = logs.get(r.search_log_id)
+        if not log or not log.stores:
+            continue
+        store = next((s for s in json.loads(log.stores) if s.get("name") == r.restaurant_name), None)
+        if not store:
+            continue
+        history.append({
+            "place": {
+                "latitude": store.get("lat"),
+                "longitude": store.get("lng"),
+                "stars": store.get("rating", 0),
+                "review_count": store.get("count", 0),
+                "is_open": 1,
+                "categories": ", ".join(store.get("categories", [])),
+                "attributes": store.get("yelp_attrs", {}),
+            },
+            "rating": float(r.rating),
+            "date": r.rated_at.isoformat() if r.rated_at else None,
+        })
+
+    # 각 식당에 대해 예측 별점 계산
+    cfg = PredictorConfig()
+    suggestions = []
+    for store in req.stores:
+        place = {
+            "latitude": store.get("lat"),
+            "longitude": store.get("lng"),
+            "stars": store.get("rating", 0),
+            "review_count": store.get("count", 0),
+            "is_open": 1,
+            "categories": ", ".join(store.get("categories", [])),
+            "attributes": store.get("yelp_attrs", {}),
+        }
+        result = _predictor.predict_rating(history, place, cfg)
+        suggestions.append({
+            "name": store.get("name"),
+            "pred_rating": round(result["pred_rating"], 2),
+            "fallback": result["fallback"],
+        })
+
+    suggestions.sort(key=lambda x: x["pred_rating"], reverse=True)
+    return {"suggestions": suggestions, "n_history": len(history)}
+
+
+@app.post("/rate")
+def rate_restaurant(req: RateRequest, username: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    # 해당 검색 로그가 이 사용자 것인지 확인
+    log = db.query(SearchLog).filter(
+        SearchLog.id == req.search_log_id,
+        SearchLog.user_id == db_user.id
+    ).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="검색 기록을 찾을 수 없습니다.")
+
+    # 이미 평가한 경우 업데이트, 없으면 새로 생성
+    existing = db.query(RestaurantRating).filter(
+        RestaurantRating.user_id == db_user.id,
+        RestaurantRating.search_log_id == req.search_log_id,
+        RestaurantRating.restaurant_name == req.restaurant_name,
+    ).first()
+
+    if existing:
+        existing.rating = req.rating
+        existing.rated_at = datetime.utcnow()
+    else:
+        new_rating = RestaurantRating(
+            user_id=db_user.id,
+            search_log_id=req.search_log_id,
+            restaurant_name=req.restaurant_name,
+            rating=req.rating,
+            rated_at=datetime.utcnow(),
+        )
+        db.add(new_rating)
+
+    db.commit()
+    return {"message": "별점이 저장되었습니다."}
+
+@app.get("/my-logs")
+def get_my_logs(username: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    logs = db.query(SearchLog).filter(
+        SearchLog.user_id == db_user.id
+    ).order_by(SearchLog.searched_at.desc()).all()
+
+    # 각 로그에 대한 별점도 함께 조회
+    ratings_by_log = {}
+    all_ratings = db.query(RestaurantRating).filter(
+        RestaurantRating.user_id == db_user.id
+    ).all()
+    for r in all_ratings:
+        if r.search_log_id not in ratings_by_log:
+            ratings_by_log[r.search_log_id] = {}
+        ratings_by_log[r.search_log_id][r.restaurant_name] = r.rating
+
+    result = []
+    for log in logs:
+        stores = json.loads(log.stores) if log.stores else []
+        categories = json.loads(log.categories) if log.categories else []
+        log_ratings = ratings_by_log.get(log.id, {})
+
+        result.append({
+            "id": log.id,
+            "searched_at": log.searched_at.isoformat() if log.searched_at else None,
+            "radius_km": log.radius_km,
+            "categories": categories,
+            "user_detail": log.user_detail,
+            "lat": log.lat,
+            "lng": log.lng,
+            "region_name": log.region_name,
+            "result_text": log.result_text,
+            "stores": stores,
+            "ratings": log_ratings,  # {restaurant_name: rating}
+        })
+
+    return result
+
+@app.delete("/my-logs/{log_id}")
+def delete_log(log_id: int, username: str = Depends(get_current_user), db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다.")
+
+    log = db.query(SearchLog).filter(
+        SearchLog.id == log_id,
+        SearchLog.user_id == db_user.id
+    ).first()
+    if not log:
+        raise HTTPException(status_code=404, detail="검색 기록을 찾을 수 없습니다.")
+
+    # 연관된 별점도 함께 삭제
+    db.query(RestaurantRating).filter(RestaurantRating.search_log_id == log_id).delete()
+    db.delete(log)
+    db.commit()
+    return {"message": "삭제되었습니다."}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

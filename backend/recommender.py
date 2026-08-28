@@ -1,5 +1,5 @@
 import requests
-import google.generativeai as genai
+import google.genai as genai
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
@@ -10,6 +10,7 @@ import os
 import math
 import logging
 from dotenv import load_dotenv
+import llm_reranker
 from mapping_utils import map_google_to_yelp_style
 
 logger = logging.getLogger(__name__)
@@ -43,8 +44,7 @@ GOOGLE_API_KEY = clean_api_key(os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("GO
 GEMINI_API_KEY = clean_api_key(os.getenv("GEMINI_API_KEY"))
 
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    llm_model = genai.GenerativeModel('models/gemini-2.0-flash')
+    llm_client = genai.Client(api_key=GEMINI_API_KEY)
 
 embed_model = SentenceTransformer('jhgan/ko-sroberta-multitask')
 
@@ -62,7 +62,10 @@ def get_naver_style_features(place_name, reviews):
     combined_review = " ".join([r.get('text', {}).get('text', '') for r in reviews[:5]])
     prompt = f"식당명: {place_name}\n리뷰: {combined_review[:800]}\n정보 JSON 추출: {{'atmosphere': '...', 'purpose': '...', 'keywords': [...]}}"
     try:
-        response = llm_model.generate_content(prompt)
+        response = llm_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
         match = re.search(r'\{.*\}', response.text, re.DOTALL)
         return json.loads(match.group(0)) if match else {}
     except: return {}
@@ -73,7 +76,7 @@ def get_bulk_places(search_query, center_lat, center_lng, radius_km):
     headers = {
         'Content-Type': 'application/json',
         'X-Goog-Api-Key': GOOGLE_API_KEY,
-        'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.reviews,places.location,places.formattedAddress,places.editorialSummary,places.priceLevel,places.servesBeer,places.servesWine,places.parkingOptions,places.goodForGroups,places.menuForChildren,places.accessibilityOptions,places.outdoorSeating,places.dineIn,places.servesCocktails,places.servesVegetarianFood,nextPageToken'
+        'X-Goog-FieldMask': 'places.id,places.displayName,places.rating,places.userRatingCount,places.reviews,places.location,places.formattedAddress,places.editorialSummary,places.priceLevel,places.servesBeer,places.servesWine,places.parkingOptions,places.goodForGroups,places.menuForChildren,places.accessibilityOptions,places.outdoorSeating,places.dineIn,places.servesCocktails,places.servesVegetarianFood,places.types,nextPageToken'
     }
     places_list = []
     next_token = None
@@ -111,8 +114,8 @@ def hybrid_filter_similarity(place_docs, user_query, threshold=0.15):
             passed.append(p)
     return passed
 
-# ✅ 3. 메인 파이프라인 (디버그 로그 + 안전장치 추가)
-def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=None):
+# 메인 파이프라인
+def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=None, hard_filters=None):
     # 1. 검색 키워드 생성
     search_keywords = list(set([f"{cat} 맛집" for cat in categories] + ([f"{user_detail} 맛집"] if user_detail else [])))
     
@@ -186,7 +189,8 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
             "lng": place_lng,
             "address": p.get('formattedAddress', ''),
             "summary": p.get('editorialSummary', {}).get('text', ''),
-            "yelp_attrs": yelp_style_attr
+            "yelp_attrs": yelp_style_attr,
+            "types": p.get('types', []),
         })
 
     logger.info(f"반경 초과 제외: {radius_dropped_count}개, 하드필터 제외: {hard_dropped_count}개")
@@ -234,29 +238,20 @@ def search_and_analyze(categories, user_detail, lat, lng, radius_km, filters=Non
         p['total_score'] = s_sim + s_rating + s_pop + s_rec
         p['match_rate'] = int(p['total_score'] * 100)
 
-    # 6. 상위 N개 추출
-    top_candidates = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:TOP_CANDIDATES_COUNT]
+    # 6. 상위 15개 선정 후 LLM 리랭킹으로 최종 Top 3 결정
+    top_15 = sorted(candidates, key=lambda x: x['total_score'], reverse=True)[:TOP_CANDIDATES_COUNT]
+    logger.info(f"📋 Top {len(top_15)}개 후보를 LLM 리랭킹에 전달...")
 
-    logger.info(f"🥇 Top {len(top_candidates)} 확정")
+    llm_result = llm_reranker.rerank_with_llm(
+        top_candidates=top_15,
+        radius_km=radius_km,
+        hard_filters=hard_filters or [],
+        user_detail=user_detail
+    )
 
-    # 7. 리포트 생성
-    report = f"\n추천 리포트 (통과 {len(candidates)}개 중 상위 {len(top_candidates)}개)\n"
-    stores_data = []
-    for rank, p in enumerate(top_candidates, 1):
-        feats = get_naver_style_features(p['name'], p['reviews']) if rank <= 5 else {}
-        report += f"🏅 {rank}위: {p['name']} (매칭 {p['match_rate']}%)\n"
-        if feats:
-            report += f"   ✨ {feats.get('purpose', '맛집')} | {feats.get('atmosphere', '분위기 좋음')}\n"
-
-        stores_data.append({
-            "name": p['name'],
-            "lat": p['lat'],
-            "lng": p['lng']
-        })
-    
     return {
-        "result": report,
-        "stores": stores_data,
+        "result": llm_result["result"],
+        "stores": llm_result["stores"],
         "scanned_count": len(all_raw_places),
         "analyzed_count": len(candidates)
     }
