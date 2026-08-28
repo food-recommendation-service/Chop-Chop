@@ -7,7 +7,7 @@ recommender.py의 Top 15 후보를 받아 LLM으로 최종 Top 3 + 선정이유�
 교체 시 rerank_with_llm() 내부의 LLM 호출 부분만 수정하면 됩니다.
 """
 
-import google.generativeai as genai
+import google.genai as genai
 import json
 import re
 import os
@@ -20,8 +20,7 @@ load_dotenv()
 # [1] 모델 설정 (추후 파인튜닝 모델로 교체할 부분)
 # ==================================================================================
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-genai.configure(api_key=GEMINI_API_KEY)
-_llm = genai.GenerativeModel('models/gemini-2.0-flash')
+_llm_client = genai.Client(api_key=GEMINI_API_KEY)
 
 
 # ==================================================================================
@@ -108,7 +107,7 @@ def rerank_with_llm(
     # ------------------------------------------------------------------
     # LLM 프롬프트
     # 교체 포인트: 이 prompt를 파인튜닝 모델 입력 포맷에 맞게 수정하거나,
-    # _llm.generate_content() 호출을 파인튜닝 모델 API 호출로 교체하세요.
+    # _llm_client.models.generate_content() 호출을 파인튜닝 모델 API 호출로 교체하세요.
     # ------------------------------------------------------------------
     prompt = f"""당신은 식당 추천 전문가입니다. 사용자 요청과 후보 식당 목록을 분석해 가장 적합한 TOP 3를 선정해주세요.
 
@@ -130,7 +129,10 @@ def rerank_with_llm(
 
     try:
         print(f"🤖 LLM 리랭킹 시작 ({len(top_candidates)}개 후보 → Top 3)...")
-        response = _llm.generate_content(prompt)
+        response = _llm_client.models.generate_content(
+            model="gemini-3.5-flash",
+            contents=prompt
+        )
         raw = response.text.strip()
 
         # JSON 파싱 (마크다운 코드블록 안에 있을 경우 대비)

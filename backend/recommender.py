@@ -1,5 +1,5 @@
 import requests
-import google.generativeai as genai
+import google.genai as genai
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
@@ -44,8 +44,7 @@ GOOGLE_API_KEY = clean_api_key(os.getenv("GOOGLE_MAPS_API_KEY") or os.getenv("GO
 GEMINI_API_KEY = clean_api_key(os.getenv("GEMINI_API_KEY"))
 
 if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    llm_model = genai.GenerativeModel('models/gemini-2.0-flash')
+    llm_client = genai.Client(api_key=GEMINI_API_KEY)
 
 embed_model = SentenceTransformer('jhgan/ko-sroberta-multitask')
 
@@ -63,7 +62,10 @@ def get_naver_style_features(place_name, reviews):
     combined_review = " ".join([r.get('text', {}).get('text', '') for r in reviews[:5]])
     prompt = f"식당명: {place_name}\n리뷰: {combined_review[:800]}\n정보 JSON 추출: {{'atmosphere': '...', 'purpose': '...', 'keywords': [...]}}"
     try:
-        response = llm_model.generate_content(prompt)
+        response = llm_client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt
+        )
         match = re.search(r'\{.*\}', response.text, re.DOTALL)
         return json.loads(match.group(0)) if match else {}
     except: return {}
